@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fuel Calc tests</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 17px/1.5 -apple-system, system-ui, sans-serif; margin: 16px; background: Canvas; color: CanvasText; }
+  .pass { color: #1a7f37; } .fail { color: #cf222e; font-weight: 600; }
+  @media (prefers-color-scheme: dark) { .pass { color: #4ac26b; } .fail { color: #ff8182; } }
+  li { margin: 4px 0; } small { display: block; opacity: .8; }
+</style>
+</head>
+<body>
+<h1>Fuel Calc tests</h1>
+<p id="summary"></p>
+<ul id="list"></ul>
+<script src="calc.js"></script>
+<script src="tests.js"></script>
+<script>
+  var results = window.TEST_RESULTS || [];
+  var failed = results.filter(function (t) { return !t.pass; }).length;
+  document.getElementById('summary').textContent = (results.length - failed) + ' passed, ' + failed + ' failed';
+  document.getElementById('summary').className = failed ? 'fail' : 'pass';
+  var list = document.getElementById('list');
+  results.forEach(function (t) {
+    var li = document.createElement('li');
+    li.className = t.pass ? 'pass' : 'fail';
+    li.textContent = (t.pass ? '✓ ' : '✗ ') + t.name;
+    if (!t.pass) { var s = document.createElement('small'); s.textContent = t.msg; li.appendChild(s); }
+    list.appendChild(li);
+  });
+</script>
+</body>
+</html>
