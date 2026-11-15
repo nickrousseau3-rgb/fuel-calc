@@ -10,6 +10,25 @@ A phone-first calculator for homemade high-carb cycling drink mixes and gels.
 | `calc.js` | All the math, as pure functions |
 | `tests.js` | Tests for the math |
 | `tests.html` | Runs the tests in a browser (works on iPhone) |
+| `manifest.webmanifest`, `icon*.png`, `icon.svg` | Let you add it to your home screen |
+
+## Use it
+
+Live at **https://nickrousseau3-rgb.github.io/fuel-calc/** (once GitHub Pages is on).
+Tests: **https://nickrousseau3-rgb.github.io/fuel-calc/tests.html**
+
+Add to your iPhone home screen: open the link in **Safari** → Share button → **Add to Home Screen**.
+
+Your settings and saved recipes are stored on that device only (in the browser's localStorage).
+Clearing Safari website data deletes them.
+
+## Deploy (GitHub Pages)
+
+1. On github.com open the repo → **Settings** → **Pages**.
+2. Source: **Deploy from a branch**. Branch: **main**, folder **/ (root)**. Save.
+3. After about a minute the site is live at the URL above. Every push to `main` updates it.
+
+GitHub Pages on a private repo needs a paid plan; on a free account make the repo public.
 
 ## Run the tests
 
