@@ -123,7 +123,8 @@
   test('format: 1 Tbsp + 1½ tsp', function () { equal(FC.formatTsp(4.5), '1 Tbsp + 1½ tsp'); });
   test('format: ¼ cup + 2½ tsp', function () { equal(FC.formatTsp(14.72), '¼ cup + 2½ tsp'); });
   test('format: ½ cup + 1 Tbsp + 2½ tsp', function () { equal(FC.formatTsp(29.41), '½ cup + 1 Tbsp + 2½ tsp'); });
-  test('format: 4¾ cup', function () { equal(FC.formatTsp(228), '4¾ cup'); });
+  test('format: 4¾ cups', function () { equal(FC.formatTsp(228), '4¾ cups'); });
+  test('format: 1 cup (singular)', function () { equal(FC.formatTsp(48), '1 cup'); });
   test('format: 90 min → 1 h 30 min', function () { equal(FC.formatMinutes(90), '1 h 30 min'); });
   test('format: 40 min', function () { equal(FC.formatMinutes(40), '40 min'); });
 

@@ -51,6 +51,7 @@
 
   function flOzToMl(oz) { return oz * ML_PER_FL_OZ; }
   function mlToFlOz(ml) { return ml / ML_PER_FL_OZ; }
+  function mlToTsp(ml) { return ml / ML_PER_TSP; }
 
   function withDefaults(settings) {
     var s = {};
@@ -313,7 +314,7 @@
     var parts = [];
     if (t >= 12) {
       var quarterCups = Math.floor(t / 12 + 1e-9);
-      parts.push(mixedNumber(Math.floor(quarterCups / 4), QUARTERS[quarterCups % 4]) + ' cup');
+      parts.push(mixedNumber(Math.floor(quarterCups / 4), QUARTERS[quarterCups % 4]) + (quarterCups > 4 ? ' cups' : ' cup'));
       t -= quarterCups * 12;
     }
     if (t >= 3 - 1e-9) {
@@ -339,6 +340,7 @@
     RATIO_PRESETS: RATIO_PRESETS,
     flOzToMl: flOzToMl,
     mlToFlOz: mlToFlOz,
+    mlToTsp: mlToTsp,
     withDefaults: withDefaults,
     resolveRatio: resolveRatio,
     targetsFromProduct: targetsFromProduct,

@@ -1,0 +1,759 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f4f4f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<title>Fuel Calc</title>
+<style>
+  /* ---------- colours (light = high contrast for sunlight) ---------- */
+  :root {
+    color-scheme: light dark;
+    --bg: #f4f4f2; --card: #ffffff; --text: #0b0b0b; --muted: #454545;
+    --line: #cfcfca; --btn: #e9e9e4; --btn-text: #0b0b0b;
+    --accent: #b93c0b; --accent-text: #ffffff; --accent-soft: #fde6da;
+    --warn-bg: #fff1c7; --warn-text: #5c3c00; --warn-line: #e0b23c;
+    --ok: #17703a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d0d0d; --card: #1a1a1a; --text: #f6f6f6; --muted: #b9b9b9;
+      --line: #383838; --btn: #2b2b2b; --btn-text: #f6f6f6;
+      --accent: #ff8a4c; --accent-text: #1c0b00; --accent-soft: #3b1e0f;
+      --warn-bg: #3a2d08; --warn-text: #ffdd8f; --warn-line: #8a6a15;
+      --ok: #5bd28a;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 18px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  main { max-width: 640px; margin: 0 auto; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 12px 0 8px; }
+  h1 { font-size: 28px; margin: 0; letter-spacing: -0.02em; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin: 12px 0; }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); }
+  small, .small { font-size: 15px; }
+
+  button { font: inherit; color: inherit; }
+  .icon-btn { width: 48px; height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font-size: 24px; }
+
+  /* ---------- segmented controls ---------- */
+  .seg { display: flex; background: var(--btn); border-radius: 12px; padding: 4px; gap: 4px; }
+  .seg button {
+    flex: 1; min-height: 48px; border: 0; border-radius: 9px; background: transparent;
+    font-weight: 600; font-size: 17px; color: var(--btn-text); padding: 0 6px;
+  }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
+  .seg + .seg, .seg + .field, .field + .seg { margin-top: 12px; }
+
+  /* ---------- number fields with − / + ---------- */
+  .field { margin-top: 14px; }
+  .field:first-child { margin-top: 0; }
+  .field label { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 6px; }
+  .field label .unit { color: var(--muted); font-weight: 500; }
+  .stepper { display: flex; gap: 8px; }
+  .stepper button {
+    width: 56px; min-height: 56px; flex: none; border-radius: 12px; border: 0;
+    background: var(--btn); color: var(--btn-text); font-size: 28px; font-weight: 600;
+    touch-action: manipulation;
+  }
+  .stepper button:active { background: var(--accent-soft); }
+  input[type="text"], input[inputmode] {
+    width: 100%; min-width: 0; min-height: 56px; border-radius: 12px; border: 2px solid var(--line);
+    background: var(--card); color: var(--text); font-family: inherit; font-size: 24px; font-weight: 600;
+    text-align: center; padding: 0 8px;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  input.invalid { border-color: #d62d20; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .hint { font-size: 15px; color: var(--muted); margin-top: 8px; }
+
+  /* ---------- results ---------- */
+  .headline { font-size: 30px; font-weight: 800; line-height: 1.15; letter-spacing: -0.02em; }
+  .sub { font-size: 17px; color: var(--muted); margin-top: 6px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+  td { padding: 12px 0; border-top: 1px solid var(--line); vertical-align: top; }
+  td.name { font-weight: 600; padding-right: 12px; width: 38%; }
+  td.amt { text-align: right; }
+  td.amt .measure { font-size: 20px; font-weight: 700; }
+  td.amt .grams { font-size: 15px; color: var(--muted); }
+  .warn { background: var(--warn-bg); color: var(--warn-text); border: 1px solid var(--warn-line); border-radius: 12px; padding: 12px; margin-top: 12px; font-size: 16px; }
+  .note { background: var(--accent-soft); border-radius: 12px; padding: 12px; margin-top: 12px; font-size: 16px; }
+  .errors { color: #d62d20; font-weight: 600; }
+  @media (prefers-color-scheme: dark) { .errors, input.invalid { color: #ff7a70; border-color: #ff7a70; } }
+
+  /* ---------- sticky summary bar ---------- */
+  #bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+    background: var(--accent); color: var(--accent-text); border: 0;
+    padding: 14px max(16px, env(safe-area-inset-left)) calc(14px + env(safe-area-inset-bottom));
+    font-size: 19px; font-weight: 700; text-align: center; width: 100%;
+  }
+
+  /* ---------- saved recipes ---------- */
+  .save-row { display: flex; gap: 8px; }
+  .save-row input { text-align: left; font-size: 18px; font-weight: 500; }
+  .btn {
+    min-height: 56px; padding: 0 18px; border-radius: 12px; border: 0;
+    background: var(--accent); color: var(--accent-text); font-weight: 700; font-size: 18px;
+  }
+  .btn.secondary { background: var(--btn); color: var(--btn-text); }
+  .btn.small { min-height: 48px; padding: 0 14px; font-size: 16px; }
+  #recipes { list-style: none; margin: 12px 0 0; padding: 0; }
+  #recipes li { display: flex; align-items: center; gap: 8px; padding: 12px 0; border-top: 1px solid var(--line); }
+  #recipes .info { flex: 1; min-width: 0; }
+  #recipes .rname { font-weight: 700; overflow-wrap: anywhere; }
+  #storage-note:empty { display: none; }
+
+  /* ---------- settings sheet ---------- */
+  dialog {
+    width: 100%; max-width: 640px; max-height: 92vh; margin: auto auto 0; padding: 0;
+    border: 0; border-radius: 20px 20px 0 0; background: var(--bg); color: var(--text);
+  }
+  dialog::backdrop { background: rgba(0,0,0,.5); }
+  .sheet-head { position: sticky; top: 0; background: var(--bg); display: flex; justify-content: space-between; align-items: center; padding: 16px; border-bottom: 1px solid var(--line); z-index: 1; }
+  .sheet-body { padding: 0 16px calc(24px + env(safe-area-inset-bottom)); }
+  .set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
+  .set-row label { flex: 1; }
+  .set-row input { width: 112px; flex: none; font-size: 20px; min-height: 48px; }
+  .sheet-actions { display: flex; gap: 8px; margin-top: 16px; }
+  .sheet-actions .btn { flex: 1; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Fuel Calc</h1>
+    <button class="icon-btn" id="open-settings" aria-label="Ingredient settings">⚙️</button>
+  </header>
+
+  <!-- What are we making? -->
+  <div class="seg" id="mode" role="group" aria-label="What to make">
+    <button type="button" data-value="bottle">Bottle</button>
+    <button type="button" data-value="flask">Gel flask</button>
+    <button type="button" data-value="batch">Batch jar</button>
+  </div>
+
+  <!-- Targets -->
+  <section class="card">
+    <h2>Targets</h2>
+    <div class="seg" id="targetBy" role="group" aria-label="Set targets by">
+      <button type="button" data-value="rate">Per hour</button>
+      <button type="button" data-value="drink">Match a drink</button>
+    </div>
+    <div id="rate-fields">
+      <div class="field" data-field="carbsPerHour"><label for="f-carbsPerHour">Carbs <span class="unit">g / hour</span></label></div>
+      <div class="field" data-field="sodiumPerHour"><label for="f-sodiumPerHour">Sodium <span class="unit">mg / hour</span></label></div>
+    </div>
+    <div id="drink-fields">
+      <div class="field" data-field="carbsPerScoop"><label for="f-carbsPerScoop">Carbs per scoop <span class="unit">g</span></label></div>
+      <div class="field" data-field="sodiumPerScoop"><label for="f-sodiumPerScoop">Sodium per scoop <span class="unit">mg</span></label></div>
+      <div class="field" data-field="scoopsPerHour"><label for="f-scoopsPerHour">Scoops per hour</label></div>
+      <p class="hint" id="drink-hint"></p>
+    </div>
+    <div class="field">
+      <label>Maltodextrin : fructose <span class="unit" id="ratio-note"></span></label>
+      <div class="seg" id="ratio" role="group" aria-label="Carb ratio">
+        <button type="button" data-value="auto">Auto</button>
+        <button type="button" data-value="2:1">2:1</button>
+        <button type="button" data-value="1:0.8">1:0.8</button>
+        <button type="button" data-value="custom">Custom</button>
+      </div>
+    </div>
+    <div class="row2" id="custom-fields">
+      <div class="field" data-field="customMalto" data-compact><label for="f-customMalto">Malto</label></div>
+      <div class="field" data-field="customFructose" data-compact><label for="f-customFructose">Fructose</label></div>
+    </div>
+  </section>
+
+  <!-- Ride (bottle / flask) -->
+  <section class="card" id="ride-card">
+    <h2 id="ride-title">Ride</h2>
+    <div class="field" data-field="hours"><label for="f-hours">Ride duration <span class="unit">hours</span></label></div>
+    <div class="field" data-field="count"><label for="f-count"><span id="count-label">Bottles</span></label></div>
+    <div class="field" data-field="size"><label for="f-size"><span id="size-label">Bottle size</span> <span class="unit size-unit"></span></label></div>
+    <div class="field" data-field="lemon"><label for="f-lemon"><span id="lemon-label">Lemon powder per bottle</span> <span class="unit">g</span></label></div>
+    <div class="seg units" role="group" aria-label="Volume units">
+      <button type="button" data-value="oz">fl oz</button>
+      <button type="button" data-value="ml">mL</button>
+    </div>
+  </section>
+
+  <!-- Batch -->
+  <section class="card" id="batch-card">
+    <h2>Batch jar</h2>
+    <div class="field" data-field="carbsPerServing"><label for="f-carbsPerServing">Carbs per bottle <span class="unit">g</span></label></div>
+    <div class="field" data-field="sizeBatch"><label for="f-sizeBatch">Bottle size <span class="unit size-unit"></span></label></div>
+    <div class="field" data-field="lemonBatch"><label for="f-lemonBatch">Lemon powder per bottle <span class="unit">g</span></label></div>
+    <div class="seg" id="batchBy" role="group" aria-label="Batch size by">
+      <button type="button" data-value="servings">By bottles</button>
+      <button type="button" data-value="weight">By weight</button>
+    </div>
+    <div class="field" data-field="servings"><label for="f-servings">Bottles' worth</label></div>
+    <div class="field" data-field="weightG"><label for="f-weightG">Jar weight <span class="unit" id="weight-lb"></span></label></div>
+    <div class="seg units" role="group" aria-label="Volume units">
+      <button type="button" data-value="oz">fl oz</button>
+      <button type="button" data-value="ml">mL</button>
+    </div>
+  </section>
+
+  <!-- Results -->
+  <section class="card" id="results" aria-live="polite">
+    <h2>Mix</h2>
+    <div class="errors" id="errors"></div>
+    <div id="result-body">
+      <div class="headline" id="headline"></div>
+      <div class="sub" id="sub"></div>
+      <div class="seg" id="view" role="group" aria-label="Amounts shown" style="margin-top:14px">
+        <button type="button" data-value="per" id="view-per">Per bottle</button>
+        <button type="button" data-value="total" id="view-total">Whole ride</button>
+      </div>
+      <table><tbody id="rows"></tbody></table>
+      <div id="extras"></div>
+      <div id="warnings"></div>
+    </div>
+  </section>
+
+  <!-- Saved recipes -->
+  <section class="card">
+    <h2>Saved recipes</h2>
+    <div class="save-row">
+      <input type="text" id="recipe-name" placeholder="Name, e.g. Gran Fondo" maxlength="60" autocomplete="off" enterkeyhint="done">
+      <button type="button" class="btn" id="save-recipe">Save</button>
+    </div>
+    <p class="warn" id="storage-note"></p>
+    <ul id="recipes"></ul>
+    <p class="hint" id="no-recipes">No saved recipes yet.</p>
+  </section>
+
+  <p class="hint" style="text-align:center">Amounts are for level spoons. Weigh a level spoon of each powder once and enter it in ⚙️ Settings for best accuracy.</p>
+</main>
+
+<button id="bar" type="button" aria-label="Jump to results"></button>
+
+<!-- Settings sheet -->
+<dialog id="settings">
+  <form method="dialog" id="settings-form" novalidate>
+    <div class="sheet-head">
+      <strong style="font-size:20px">Ingredient settings</strong>
+      <button class="btn secondary small" value="cancel" type="submit">Close</button>
+    </div>
+    <div class="sheet-body">
+      <div id="settings-fields"></div>
+      <p class="errors" id="settings-errors"></p>
+      <div class="sheet-actions">
+        <button class="btn secondary" type="button" id="reset-settings">Reset to defaults</button>
+        <button class="btn" type="button" id="save-settings">Save</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<script src="calc.js"></script>
+<script>
+(function () {
+  'use strict';
+  var FC = window.FuelCalc;
+
+  // =====================================================================
+  // Storage — every read/write is wrapped so a full or blocked
+  // localStorage (e.g. Private Browsing) never breaks the calculator.
+  // =====================================================================
+  var KEYS = { state: 'fuelcalc.state.v1', settings: 'fuelcalc.settings.v1', recipes: 'fuelcalc.recipes.v1' };
+
+  function storageGet(key, fallback) {
+    try {
+      var raw = localStorage.getItem(key);
+      return raw == null ? fallback : JSON.parse(raw);
+    } catch (e) {
+      console.warn('Could not read ' + key, e);
+      return fallback;
+    }
+  }
+  function storageSet(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+      setStorageNote('');
+      return true;
+    } catch (e) {
+      console.warn('Could not save ' + key, e);
+      setStorageNote('Can’t save on this device (storage is full or blocked, e.g. Private Browsing). The calculator still works.');
+      return false;
+    }
+  }
+  function setStorageNote(msg) { document.getElementById('storage-note').textContent = msg; }
+
+  // =====================================================================
+  // State
+  // =====================================================================
+  function defaultState() {
+    return {
+      mode: 'bottle', targetBy: 'rate',
+      carbsPerHour: 90, sodiumPerHour: 700,
+      drink: { carbsPerScoop: 20, sodiumPerScoop: 380, scoopsPerHour: 3 },
+      ratio: 'auto', custom: { malto: 1, fructose: 1 },
+      hours: 3, units: 'oz',
+      bottle: { sizeMl: FC.flOzToMl(24), count: 2, lemonG: 3 },
+      flask: { sizeMl: 150, count: 3, lemonG: 3 },
+      batch: { carbsPerServing: 90, by: 'servings', servings: 10, weightG: 680 },
+      view: 'per'
+    };
+  }
+  // Copy saved values over the defaults, keeping only values of the right type.
+  function mergeState(base, saved) {
+    if (!saved || typeof saved !== 'object') return base;
+    Object.keys(base).forEach(function (k) {
+      if (!(k in saved)) return;
+      if (base[k] && typeof base[k] === 'object') {
+        if (saved[k] && typeof saved[k] === 'object') {
+          Object.keys(base[k]).forEach(function (j) {
+            if (typeof saved[k][j] === typeof base[k][j]) base[k][j] = saved[k][j];
+          });
+        }
+      } else if (typeof saved[k] === typeof base[k]) {
+        base[k] = saved[k];
+      }
+    });
+    return base;
+  }
+
+  var state = mergeState(defaultState(), storageGet(KEYS.state, null));
+  var settings = FC.withDefaults(storageGet(KEYS.settings, null));
+
+  // Bottle mode and batch use the bottle settings; flask mode uses flask ones.
+  function cur() { return state.mode === 'flask' ? state.flask : state.bottle; }
+  var isOz = function () { return state.units === 'oz'; };
+
+  // =====================================================================
+  // Number fields. Each has a getter/setter into `state`, a step for
+  // the − / + buttons, a minimum, and decimals to show.
+  // =====================================================================
+  var sizeField = {
+    get: function () { return isOz() ? FC.mlToFlOz(cur().sizeMl) : cur().sizeMl; },
+    set: function (v) { cur().sizeMl = isOz() ? FC.flOzToMl(v) : v; },
+    step: function () { return isOz() ? 1 : 10; }, min: 1, dp: function () { return isOz() ? 1 : 0; }
+  };
+  var bottleSizeField = {
+    get: function () { return isOz() ? FC.mlToFlOz(state.bottle.sizeMl) : state.bottle.sizeMl; },
+    set: function (v) { state.bottle.sizeMl = isOz() ? FC.flOzToMl(v) : v; },
+    step: sizeField.step, min: 1, dp: sizeField.dp
+  };
+  function prop(obj, key, step, min, dp) {
+    return {
+      get: function () { return obj()[key]; },
+      set: function (v) { obj()[key] = v; },
+      step: step, min: min, dp: dp
+    };
+  }
+  var S = function () { return state; };
+  var FIELDS = {
+    carbsPerHour: prop(S, 'carbsPerHour', 5, 1, 0),
+    sodiumPerHour: prop(S, 'sodiumPerHour', 50, 0, 0),
+    carbsPerScoop: prop(function () { return state.drink; }, 'carbsPerScoop', 1, 0, 1),
+    sodiumPerScoop: prop(function () { return state.drink; }, 'sodiumPerScoop', 10, 0, 0),
+    scoopsPerHour: prop(function () { return state.drink; }, 'scoopsPerHour', 0.5, 0.25, 2),
+    customMalto: prop(function () { return state.custom; }, 'malto', 0.1, 0, 2),
+    customFructose: prop(function () { return state.custom; }, 'fructose', 0.1, 0, 2),
+    hours: prop(S, 'hours', 0.25, 0.25, 2),
+    count: prop(cur, 'count', 1, 1, 0),
+    size: sizeField,
+    lemon: prop(cur, 'lemonG', 0.5, 0, 1),
+    carbsPerServing: prop(function () { return state.batch; }, 'carbsPerServing', 5, 1, 0),
+    sizeBatch: bottleSizeField,
+    lemonBatch: prop(function () { return state.bottle; }, 'lemonG', 0.5, 0, 1),
+    servings: prop(function () { return state.batch; }, 'servings', 1, 1, 1),
+    weightG: prop(function () { return state.batch; }, 'weightG', 50, 1, 0)
+  };
+  function val(x) { return typeof x === 'function' ? x() : x; }
+  function fmtNum(v, dp) { return isFinite(v) ? String(parseFloat(v.toFixed(dp))) : ''; }
+  function parseNum(text) {
+    var t = String(text).trim().replace(',', '.');
+    return t === '' ? NaN : Number(t);
+  }
+
+  // Build the − input + controls inside each .field[data-field]
+  document.querySelectorAll('.field[data-field]').forEach(function (el) {
+    var name = el.getAttribute('data-field');
+    var f = FIELDS[name];
+    var wrap = document.createElement('div');
+    wrap.className = 'stepper';
+    var dec = document.createElement('button'); dec.type = 'button'; dec.textContent = '−'; dec.setAttribute('aria-label', 'Decrease');
+    var inc = document.createElement('button'); inc.type = 'button'; inc.textContent = '+'; inc.setAttribute('aria-label', 'Increase');
+    var input = document.createElement('input');
+    input.type = 'text'; input.id = 'f-' + name; input.inputMode = 'decimal';
+    input.autocomplete = 'off'; input.setAttribute('enterkeyhint', 'done');
+    if (el.hasAttribute('data-compact')) { wrap.appendChild(input); }
+    else { wrap.appendChild(dec); wrap.appendChild(input); wrap.appendChild(inc); }
+    el.appendChild(wrap);
+
+    function bump(dir) {
+      var step = val(f.step), min = val(f.min);
+      var v = f.get();
+      if (!isFinite(v)) v = min;
+      v = Math.round((v + dir * step) / step) * step;
+      f.set(Math.max(min, v));
+      input.value = fmtNum(f.get(), val(f.dp));
+      input.classList.remove('invalid');
+      update();
+    }
+    dec.addEventListener('click', function () { bump(-1); });
+    inc.addEventListener('click', function () { bump(1); });
+    input.addEventListener('input', function () {
+      var v = parseNum(input.value);
+      var bad = !isFinite(v) || v < val(f.min);
+      input.classList.toggle('invalid', bad);
+      f.set(bad ? NaN : v);
+      update();
+    });
+    input.addEventListener('blur', function () { if (isFinite(f.get())) input.value = fmtNum(f.get(), val(f.dp)); });
+    input.addEventListener('focus', function () { setTimeout(function () { try { input.select(); } catch (e) {} }, 0); });
+    el._input = input;
+  });
+
+  // Write state values into all inputs (except the one being typed in)
+  function fillInputs() {
+    document.querySelectorAll('.field[data-field]').forEach(function (el) {
+      var f = FIELDS[el.getAttribute('data-field')];
+      if (document.activeElement === el._input) return;
+      var v = f.get();
+      el._input.value = fmtNum(v, val(f.dp));
+      el._input.classList.toggle('invalid', !isFinite(v));
+    });
+  }
+
+  // Segmented controls
+  function bindSeg(selector, getter, setter) {
+    document.querySelectorAll(selector).forEach(function (seg) {
+      seg.addEventListener('click', function (e) {
+        var b = e.target.closest('button[data-value]');
+        if (!b) return;
+        setter(b.getAttribute('data-value'));
+        fillInputs();
+        update();
+      });
+      seg._sync = function () {
+        seg.querySelectorAll('button[data-value]').forEach(function (b) {
+          b.setAttribute('aria-pressed', String(b.getAttribute('data-value') === getter()));
+        });
+      };
+    });
+  }
+  bindSeg('#mode', function () { return state.mode; }, function (v) { state.mode = v; });
+  bindSeg('#targetBy', function () { return state.targetBy; }, function (v) { state.targetBy = v; });
+  bindSeg('#ratio', function () { return state.ratio; }, function (v) { state.ratio = v; });
+  bindSeg('.units', function () { return state.units; }, function (v) { state.units = v; });
+  bindSeg('#batchBy', function () { return state.batch.by; }, function (v) { state.batch.by = v; });
+  bindSeg('#view', function () { return state.view; }, function (v) { state.view = v; });
+  function syncSegs() { document.querySelectorAll('.seg').forEach(function (s) { if (s._sync) s._sync(); }); }
+
+  // =====================================================================
+  // Calculation (all the math lives in calc.js)
+  // =====================================================================
+  function targets() {
+    return state.targetBy === 'drink'
+      ? FC.targetsFromProduct(state.drink)
+      : { carbsPerHour: state.carbsPerHour, sodiumPerHour: state.sodiumPerHour };
+  }
+  function ratioInput() {
+    return state.ratio === 'custom' ? { malto: state.custom.malto, fructose: state.custom.fructose } : state.ratio;
+  }
+
+  function compute() {
+    var t = targets();
+    if (state.mode === 'batch') {
+      // One serving = one bottle with `carbsPerServing` carbs. Sodium and the
+      // auto ratio follow your hourly targets, so the bottle "lasts"
+      // carbsPerServing / carbsPerHour hours.
+      var cps = state.batch.carbsPerServing;
+      if (!(cps > 0)) return { ok: false, errors: ['Carbs per bottle must be more than 0.'] };
+      if (!(t.carbsPerHour > 0)) return { ok: false, errors: ['Carb target must be more than 0.'] };
+      var r = FC.calculate({
+        hours: cps / t.carbsPerHour, carbsPerHour: t.carbsPerHour, sodiumPerHour: t.sodiumPerHour,
+        ratio: ratioInput(), format: 'bottle', containerMl: state.bottle.sizeMl, containers: 1, lemonG: state.bottle.lemonG
+      }, settings);
+      if (!r.ok) return r;
+      var b = FC.batch(r.perContainer, state.batch.by === 'servings' ? { servings: state.batch.servings } : { batchG: state.batch.weightG }, settings);
+      if (!b.ok) return b;
+      r.batch = b;
+      return r;
+    }
+    return FC.calculate({
+      hours: state.hours, carbsPerHour: t.carbsPerHour, sodiumPerHour: t.sodiumPerHour,
+      ratio: ratioInput(), format: state.mode, containerMl: cur().sizeMl, containers: cur().count, lemonG: cur().lemonG
+    }, settings);
+  }
+
+  // =====================================================================
+  // Rendering
+  // =====================================================================
+  var INGREDIENTS = [
+    ['maltoG', 'Maltodextrin'],
+    ['fructoseG', 'Fructose'],
+    ['citrateG', 'Sodium citrate'],
+    ['saltG', 'Table salt'],
+    ['lemonG', 'Lemon powder'],
+    ['citricG', 'Citric acid']
+  ];
+  function g(x) { return (x < 10 ? x.toFixed(1) : Math.round(x).toLocaleString()) + ' g'; }
+  function mg(x) { return Math.round(x).toLocaleString() + ' mg'; }
+  function vol(ml) {
+    return isOz() ? fmtNum(FC.mlToFlOz(ml), 1) + ' fl oz' : Math.round(ml).toLocaleString() + ' mL';
+  }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function row(name, measure, sub) {
+    var tr = el('tr');
+    tr.appendChild(el('td', 'name', name));
+    var td = el('td', 'amt');
+    td.appendChild(el('div', 'measure', measure));
+    if (sub) td.appendChild(el('div', 'grams', sub));
+    tr.appendChild(td);
+    return tr;
+  }
+  function show(id, on) { document.getElementById(id).classList.toggle('hidden', !on); }
+
+  function update() {
+    var mode = state.mode;
+    var noun = mode === 'flask' ? 'flask' : 'bottle';
+    var Noun = noun.charAt(0).toUpperCase() + noun.slice(1);
+
+    // Show / hide parts of the form
+    show('rate-fields', state.targetBy === 'rate');
+    show('drink-fields', state.targetBy === 'drink');
+    show('custom-fields', state.ratio === 'custom');
+    show('ride-card', mode !== 'batch');
+    show('batch-card', mode === 'batch');
+    document.querySelector('[data-field="servings"]').classList.toggle('hidden', state.batch.by !== 'servings');
+    document.querySelector('[data-field="weightG"]').classList.toggle('hidden', state.batch.by !== 'weight');
+    document.getElementById('ride-title').textContent = mode === 'flask' ? 'Ride · gel flasks' : 'Ride · bottles';
+    document.getElementById('count-label').textContent = Noun + 's';
+    document.getElementById('size-label').textContent = Noun + ' size';
+    document.getElementById('lemon-label').textContent = 'Lemon powder per ' + noun;
+    document.querySelectorAll('.size-unit').forEach(function (u) { u.textContent = isOz() ? 'fl oz' : 'mL'; });
+    document.getElementById('view-per').textContent = 'Per ' + noun;
+    document.getElementById('view-total').textContent = mode === 'batch' ? 'Whole jar' : 'Whole ride';
+    document.getElementById('weight-lb').textContent = isFinite(state.batch.weightG) ? 'g (' + fmtNum(state.batch.weightG / 453.6, 2) + ' lb)' : 'g';
+
+    var t = targets();
+    document.getElementById('drink-hint').textContent = isFinite(t.carbsPerHour) && isFinite(t.sodiumPerHour)
+      ? '= ' + Math.round(t.carbsPerHour) + ' g carbs and ' + mg(t.sodiumPerHour) + ' sodium per hour' : '';
+    syncSegs();
+
+    var r = compute();
+    var errorsEl = document.getElementById('errors');
+    var bar = document.getElementById('bar');
+    errorsEl.textContent = '';
+    if (!r.ok) {
+      r.errors.forEach(function (m) { errorsEl.appendChild(el('div', null, m)); });
+      show('result-body', false);
+      bar.textContent = 'Check your inputs';
+      saveState();
+      return;
+    }
+    show('result-body', true);
+    document.getElementById('ratio-note').textContent = 'using ' + r.ratio.label;
+
+    var pc = r.perContainer;
+    var per = state.view === 'per';
+    var amounts = mode === 'batch' ? (per ? pc : r.batch.amounts) : (per ? pc : r.total);
+    var headline = document.getElementById('headline');
+    var sub = document.getElementById('sub');
+    var extras = document.getElementById('extras');
+    extras.textContent = '';
+
+    if (mode === 'batch') {
+      var b = r.batch;
+      var nBottles = fmtNum(b.servings, 1);
+      headline.textContent = nBottles + ' bottles’ worth · ' + g(b.totalG);
+      sub.textContent = 'Each bottle: ' + Math.round(pc.carbs) + ' g carbs, ' + mg(pc.sodiumMg) + ' sodium, ' +
+        r.carbsPer100Ml.toFixed(1) + ' g/100 mL · lasts ' + FC.formatMinutes(r.minutesPerContainer) +
+        ' at ' + Math.round(t.carbsPerHour) + ' g/h';
+      bar.textContent = 'Jar: ' + nBottles + ' bottles · scoop ' + FC.formatTsp(b.servingTsp) + ' each';
+      var n1 = el('div', 'note');
+      n1.appendChild(el('strong', null, 'Per bottle: '));
+      n1.appendChild(document.createTextNode('scoop ' + FC.formatTsp(b.servingTsp) + ' of mix (' + g(b.servingG) + '), then fill with water (about ' + vol(pc.waterMl) + ').'));
+      extras.appendChild(n1);
+      extras.appendChild(el('div', 'note', '¼ cup scoop of mix ≈ ' + g(b.quarterCup.grams) + ' → ' + Math.round(b.quarterCup.carbs) + ' g carbs, ' + mg(b.quarterCup.sodiumMg) + ' sodium.'));
+      extras.appendChild(el('div', 'note', 'Shake or tumble the jar before scooping: salt and citrate settle to the bottom.'));
+    } else {
+      var every = '1 ' + noun + ' every ' + FC.formatMinutes(r.minutesPerContainer);
+      headline.textContent = every;
+      sub.textContent = Math.round(pc.carbs) + ' g carbs · ' + mg(pc.sodiumMg) + ' sodium · ' + r.carbsPer100Ml.toFixed(1) + ' g/100 mL per ' + noun;
+      bar.textContent = every + ' · ' + Math.round(pc.carbs) + ' g carbs';
+      if (mode === 'bottle') {
+        var sip15 = cur().sizeMl * 15 / r.minutesPerContainer;
+        extras.appendChild(el('div', 'note', 'Drink about ' + vol(sip15) + ' every 15 min. That’s ' + vol(r.fluidMlPerHour) + ' of fluid per hour.'));
+      } else {
+        extras.appendChild(el('div', 'note', 'Follow each squeeze with 2–3 gulps of plain water.'));
+      }
+    }
+
+    // Ingredient table
+    var rows = document.getElementById('rows');
+    rows.textContent = '';
+    INGREDIENTS.forEach(function (ing) {
+      var grams = amounts[ing[0]];
+      if (!(grams > 0.005)) return;
+      rows.appendChild(row(ing[1], FC.formatTsp(FC.tspFor(ing[0], grams, settings)), g(grams)));
+    });
+    if (mode === 'bottle') {
+      rows.appendChild(row('Water', per ? 'Fill to the top' : vol(amounts.waterMl) + ' total', per ? 'about ' + vol(amounts.waterMl) : null));
+    } else if (mode === 'flask') {
+      rows.appendChild(row('Warm water', FC.formatTsp(FC.mlToTsp(amounts.waterMl)), vol(amounts.waterMl)));
+    }
+
+    var warnings = document.getElementById('warnings');
+    warnings.textContent = '';
+    r.warnings.forEach(function (w) { warnings.appendChild(el('div', 'warn', '⚠️ ' + w)); });
+
+    saveState();
+  }
+
+  var saveTimer;
+  function saveState() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () { storageSet(KEYS.state, state); }, 300);
+  }
+
+  document.getElementById('bar').addEventListener('click', function () {
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  // =====================================================================
+  // Saved recipes
+  // =====================================================================
+  function loadRecipes() {
+    var list = storageGet(KEYS.recipes, []);
+    return Array.isArray(list) ? list.filter(function (x) { return x && typeof x.name === 'string' && x.inputs; }) : [];
+  }
+  var recipes = loadRecipes();
+
+  function describe(inputs) {
+    var s = mergeState(defaultState(), inputs);
+    var c = s.targetBy === 'drink' ? FC.targetsFromProduct(s.drink).carbsPerHour : s.carbsPerHour;
+    if (s.mode === 'batch') return 'Batch jar · ' + s.batch.carbsPerServing + ' g per bottle';
+    var box = s.mode === 'flask' ? s.flask : s.bottle;
+    return s.hours + ' h · ' + Math.round(c) + ' g/h · ' + box.count + ' ' + (s.mode === 'flask' ? 'flask' : 'bottle') + (box.count === 1 ? '' : 's');
+  }
+
+  function renderRecipes() {
+    var ul = document.getElementById('recipes');
+    ul.textContent = '';
+    show('no-recipes', recipes.length === 0);
+    recipes.forEach(function (rec) {
+      var li = el('li');
+      var info = el('div', 'info');
+      info.appendChild(el('div', 'rname', rec.name));
+      var d = new Date(rec.date);
+      info.appendChild(el('div', 'small muted', (isNaN(d) ? '' : d.toLocaleDateString() + ' · ') + describe(rec.inputs)));
+      var load = el('button', 'btn small', 'Load'); load.type = 'button';
+      var del = el('button', 'btn secondary small', 'Delete'); del.type = 'button';
+      load.addEventListener('click', function () {
+        state = mergeState(defaultState(), rec.inputs);
+        fillInputs(); update();
+        document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      del.addEventListener('click', function () {
+        if (!confirm('Delete “' + rec.name + '”?')) return;
+        recipes = recipes.filter(function (x) { return x.id !== rec.id; });
+        storageSet(KEYS.recipes, recipes);
+        renderRecipes();
+      });
+      li.appendChild(info); li.appendChild(load); li.appendChild(del);
+      ul.appendChild(li);
+    });
+  }
+
+  document.getElementById('save-recipe').addEventListener('click', function () {
+    var nameEl = document.getElementById('recipe-name');
+    var name = nameEl.value.trim() || describe(state);
+    var snapshot = JSON.parse(JSON.stringify(state));
+    var existing = recipes.filter(function (x) { return x.name === name; })[0];
+    if (existing && !confirm('Replace the saved recipe “' + name + '”?')) return;
+    var rec = { id: existing ? existing.id : Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: name, date: new Date().toISOString(), inputs: snapshot };
+    recipes = recipes.filter(function (x) { return x !== existing; });
+    recipes.unshift(rec);
+    if (storageSet(KEYS.recipes, recipes)) nameEl.value = '';
+    renderRecipes();
+  });
+
+  // =====================================================================
+  // Settings sheet
+  // =====================================================================
+  var SETTING_GROUPS = [
+    ['Maltodextrin', [['maltoCarbPct', 'Carbs per 100 g', 'g', true], ['maltoGPerTbsp', 'Weight of 1 level Tbsp', 'g', true]]],
+    ['Fructose', [['fructoseCarbPct', 'Carbs per 100 g', 'g', true], ['fructoseGPerTbsp', 'Weight of 1 level Tbsp', 'g', true]]],
+    ['Sodium citrate', [['citrateSodiumPct', 'Sodium by weight', '%', true], ['citrateGPerTsp', 'Weight of 1 level tsp', 'g', true]]],
+    ['Table salt', [['saltSodiumPct', 'Sodium by weight', '%', true], ['saltGPerTsp', 'Weight of 1 level tsp', 'g', true]]],
+    ['Lemon juice powder', [['lemonCarbPct', 'Carbs per 100 g', 'g'], ['lemonGPerTsp', 'Weight of 1 level tsp', 'g', true]]],
+    ['Citric acid', [['citricGPerTsp', 'Weight of 1 level tsp', 'g', true], ['citricGPerCarbG', 'Grams per gram of carbs', 'g']]],
+    ['Sodium split', [['saltSodiumShare', 'Share of sodium from salt', '%'], ['saltCapTsp', 'Max salt per container', 'tsp']]],
+    ['Mixing', [
+      ['displacementMlPerG', 'Space 1 g of powder takes', 'mL'],
+      ['gelWaterMlPerCarbG', 'Flask water per g carbs', 'mL'],
+      ['gelMinWaterMlPerCarbG', 'Flask minimum water per g carbs', 'mL'],
+      ['flaskFillPct', 'Usable part of a flask', '%', true]
+    ]],
+    ['Warnings & auto ratio', [
+      ['concWarnPct', 'Warn above (bottle)', 'g/100 mL', true],
+      ['citrateWarnG', 'Warn above sodium citrate', 'g', true],
+      ['autoRatioCutoff', 'Auto uses 1:0.8 from', 'g/h', true]
+    ]]
+  ];
+
+  var dialog = document.getElementById('settings');
+  var settingsBox = document.getElementById('settings-fields');
+  SETTING_GROUPS.forEach(function (grp) {
+    settingsBox.appendChild(el('h2', null, grp[0])).style.marginTop = '20px';
+    grp[1].forEach(function (f) {
+      var rowEl = el('div', 'set-row');
+      var lab = el('label', null, f[1] + ' (' + f[2] + ')');
+      lab.htmlFor = 's-' + f[0];
+      var inp = document.createElement('input');
+      inp.type = 'text'; inp.inputMode = 'decimal'; inp.id = 's-' + f[0]; inp.autocomplete = 'off';
+      inp.dataset.key = f[0]; inp.dataset.positive = f[3] ? '1' : '';
+      rowEl.appendChild(lab); rowEl.appendChild(inp);
+      settingsBox.appendChild(rowEl);
+    });
+  });
+  function fillSettings(src) {
+    settingsBox.querySelectorAll('input').forEach(function (inp) { inp.value = String(src[inp.dataset.key]); inp.classList.remove('invalid'); });
+    document.getElementById('settings-errors').textContent = '';
+  }
+  document.getElementById('open-settings').addEventListener('click', function () {
+    fillSettings(settings);
+    if (dialog.showModal) dialog.showModal(); else dialog.setAttribute('open', '');
+  });
+  document.getElementById('reset-settings').addEventListener('click', function () { fillSettings(FC.DEFAULT_SETTINGS); });
+  document.getElementById('save-settings').addEventListener('click', function () {
+    var next = {}, bad = 0;
+    settingsBox.querySelectorAll('input').forEach(function (inp) {
+      var v = parseNum(inp.value);
+      var invalid = !isFinite(v) || v < 0 || (inp.dataset.positive && v === 0);
+      inp.classList.toggle('invalid', invalid);
+      if (invalid) bad++; else next[inp.dataset.key] = v;
+    });
+    if (bad) { document.getElementById('settings-errors').textContent = 'Fix the ' + bad + ' highlighted value' + (bad > 1 ? 's' : '') + ' (numbers only, not negative).'; return; }
+    settings = FC.withDefaults(next);
+    storageSet(KEYS.settings, settings);
+    dialog.close ? dialog.close() : dialog.removeAttribute('open');
+    update();
+  });
+
+  // =====================================================================
+  // Start
+  // =====================================================================
+  fillInputs();
+  renderRecipes();
+  update();
+})();
+</script>
+</body>
+</html>
