@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#b93c0b"/>
+  <!-- bottle cap and nozzle -->
+  <rect x="226" y="64" width="60" height="44" rx="10" fill="#ffffff"/>
+  <rect x="196" y="104" width="120" height="44" rx="12" fill="#ffffff"/>
+  <!-- bottle body -->
+  <path d="M176 156 h160 c18 0 30 14 30 32 v232 c0 22 -18 36 -40 36 h-140 c-22 0 -40 -14 -40 -36 v-232 c0 -18 12 -32 30 -32 z" fill="#ffffff"/>
+  <!-- drink level -->
+  <path d="M168 290 h176 v128 c0 14 -10 22 -24 22 h-128 c-14 0 -24 -8 -24 -22 z" fill="#ffb98f"/>
+  <!-- lightning bolt -->
+  <path d="M272 196 l-64 116 h44 l-20 96 l76 -128 h-46 z" fill="#b93c0b"/>
+</svg>
