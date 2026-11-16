@@ -22,12 +22,12 @@
     maltoGPerTbsp: 7.9,        // 63 g per 1/2 cup = 7.9 g per level Tbsp
     fructoseCarbPct: 100,
     fructoseGPerTbsp: 12,
-    citrateSodiumPct: 23.4,    // sodium citrate dihydrate
+    citrateSodiumPct: 23.5,    // sodium citrate dihydrate
     citrateGPerTsp: 6,
     saltSodiumPct: 39,         // table salt (NaCl)
     saltGPerTsp: 6,
     lemonCarbPct: 85,          // counted toward total carbs
-    lemonGPerTsp: 2.6,
+    lemonGPerTsp: 2.65,
     citricGPerTsp: 5,
 
     saltSodiumShare: 15,       // % of sodium from table salt (rest from citrate)
@@ -39,7 +39,19 @@
     flaskFillPct: 90,          // usable part of a flask (135 of 150 mL)
     concWarnPct: 12,           // warn above this many g carbs per 100 mL (bottle)
     citrateWarnG: 4.5,         // warn above this much sodium citrate per container
-    autoRatioCutoff: 75        // g/h at or above which "auto" picks 1:0.8
+    autoRatioCutoff: 75,       // g/h at or above which "auto" picks 1:0.8
+
+    // Single-serving flow (main screen)
+    sodiumMgPerCarbG: 15,      // default sodium: 15 mg per g of carbs
+    lemonGPerContainer: 3,     // lemon juice powder per bottle / flask / tub serving
+    juiceMlPerContainer: 14.8, // fresh lemon/lime juice: 1 Tbsp
+    juiceCarbsPerTbsp: 1,      // ~1 g carbs per Tbsp of juice
+    flaskMl: 150,              // HydraPak soft flask
+    flaskMaxCarbs: 100,        // more than this won't fit in 135 mL
+    tubTargetG: 680,           // dry mix to fill the tub (~1.5 lb)
+    carbTolPct: 10,            // rounding may move carbs ±10%
+    sodiumTolPct: 20,          // ... sodium ±20%
+    ratioTolPct: 15            // ... ratio ±15% (2:1 → 1.7–2.3)
   };
 
   var RATIO_PRESETS = {
@@ -335,6 +347,372 @@
     return h + ' h' + (r ? ' ' + r + ' min' : '');
   }
 
+  // =====================================================================
+  // Single-serving flow: every ingredient is ONE kitchen measure used a
+  // whole number of times ("4 Tbsp", "3 × ½ tsp"), never a combination.
+  // =====================================================================
+
+  // The measures the user owns, in teaspoons. `whole` measures read
+  // "3 Tbsp"; fractional ones read "3 × ½ tsp".
+  var MEASURES = [
+    { tsp: 48, label: 'cup', whole: true },
+    { tsp: 24, label: '½ cup' },
+    { tsp: 16, label: '⅓ cup' },
+    { tsp: 12, label: '¼ cup' },
+    { tsp: 3, label: 'Tbsp', whole: true },
+    { tsp: 1, label: 'tsp', whole: true },
+    { tsp: 0.5, label: '½ tsp' },
+    { tsp: 0.25, label: '¼ tsp' },
+    { tsp: 0.125, label: '⅛ tsp' }
+  ];
+  var PINCH = { tsp: 1 / 16, label: 'pinch', pinch: true };
+  var MAX_SCOOPS = 24;
+  var EPS = 1e-9;
+
+  /** {measure, count} → "4 Tbsp", "1 cup", "2 cups", "3 × ½ tsp", "pinch". */
+  function formatMeasure(m, count) {
+    if (!m || !count) return '—';
+    if (m.pinch) return 'pinch';
+    if (m.whole) {
+      if (m.label === 'cup') return count + (count === 1 ? ' cup' : ' cups');
+      return count + ' ' + m.label;
+    }
+    return count === 1 ? m.label : count + ' × ' + m.label;
+  }
+
+  /** For each measure, the counts just below and above the target. */
+  function measureOptions(targetTsp) {
+    var out = [];
+    if (!(targetTsp > 0)) return out;
+    MEASURES.forEach(function (m) {
+      var x = targetTsp / m.tsp;
+      var lo = Math.floor(x + EPS), hi = Math.ceil(x - EPS);
+      [lo, hi].forEach(function (c, i) {
+        if (c < 1 || c > MAX_SCOOPS || (i === 1 && hi === lo)) return;
+        out.push({ measure: m, count: c, tsp: c * m.tsp });
+      });
+    });
+    return out;
+  }
+
+  /** Every measure × count up to maxTsp, around a target (for water). */
+  function waterOptions(targetTsp, maxTsp) {
+    var out = [];
+    MEASURES.forEach(function (m) {
+      for (var c = 1; c <= MAX_SCOOPS && c * m.tsp <= maxTsp + EPS; c++) out.push({ measure: m, count: c, tsp: c * m.tsp });
+    });
+    return out;
+  }
+
+  /** The single measure closest to a target (ties → fewer scoops). */
+  function nearestMeasure(targetTsp) {
+    var best = null;
+    measureOptions(targetTsp).forEach(function (o) {
+      var err = Math.abs(o.tsp - targetTsp);
+      if (!best || err < best.err - EPS || (Math.abs(err - best.err) <= EPS && o.count < best.opt.count)) best = { opt: o, err: err };
+    });
+    return best && best.opt;
+  }
+
+  /**
+   * Fewest scoops that land within ±tol of the target (ties → closest).
+   * Falls back to the nearest measure if none is within tolerance.
+   */
+  function fewestScoops(targetTsp, tol) {
+    var best = null;
+    measureOptions(targetTsp).forEach(function (o) {
+      var err = Math.abs(o.tsp / targetTsp - 1);
+      if (err > tol + EPS) return;
+      if (!best || o.count < best.o.count || (o.count === best.o.count && err < best.err)) best = { o: o, err: err };
+    });
+    return best ? best.o : nearestMeasure(targetTsp);
+  }
+
+  function densities(s) {
+    return {
+      malto: s.maltoGPerTbsp / TSP_PER_TBSP,
+      fructose: s.fructoseGPerTbsp / TSP_PER_TBSP,
+      citrate: s.citrateGPerTsp,
+      salt: s.saltGPerTsp,
+      lemon: s.lemonGPerTsp
+    };
+  }
+
+  function item(key, name, opt, gPerTsp) {
+    return { key: key, name: name, measure: opt.measure, count: opt.count, tsp: opt.tsp, grams: opt.tsp * gPerTsp, text: formatMeasure(opt.measure, opt.count) };
+  }
+
+  /**
+   * Choose maltodextrin + fructose measures together.
+   * Keeps combos with carbs within ±carbTol and ratio within ±ratioTol
+   * (and anything `check` demands), then picks the fewest scoops, then the
+   * smallest carb error. If nothing fits, returns the closest combo with
+   * withinTolerance = false.
+   */
+  function pickCarbs(targetCarbs, fixedCarbs, ratio, s, check) {
+    var d = densities(s);
+    var split = targetCarbs - fixedCarbs;
+    if (!(split > 0)) return null;
+    var mTsp = split * ratio / (1 + ratio) / (s.maltoCarbPct / 100) / d.malto;
+    var fTsp = split / (1 + ratio) / (s.fructoseCarbPct / 100) / d.fructose;
+    var best = null, fallback = null;
+    measureOptions(mTsp).forEach(function (m) {
+      measureOptions(fTsp).forEach(function (f) {
+        var mg = m.tsp * d.malto, fg = f.tsp * d.fructose;
+        var mc = mg * s.maltoCarbPct / 100, fc = fg * s.fructoseCarbPct / 100;
+        var carbs = mc + fc + fixedCarbs;
+        var carbErr = carbs / targetCarbs - 1, ratioErr = (mc / fc) / ratio - 1;
+        var extra = check ? check(mg, fg, carbs) : { ok: true };
+        var c = { m: m, f: f, carbs: carbs, ratio: mc / fc, carbErr: carbErr, extra: extra, scoops: m.count + f.count };
+        var dist = Math.abs(carbErr) + Math.abs(ratioErr);
+        if (extra.ok && (!fallback || dist < fallback.dist)) { fallback = c; c.dist = dist; }
+        if (!extra.ok || Math.abs(carbErr) > s.carbTolPct / 100 + EPS || Math.abs(ratioErr) > s.ratioTolPct / 100 + EPS) return;
+        if (!best || c.scoops < best.scoops || (c.scoops === best.scoops && Math.abs(carbErr) < Math.abs(best.carbErr))) best = c;
+      });
+    });
+    var pick = best || fallback;
+    if (!pick) return null;
+    return {
+      malto: item('malto', 'Maltodextrin', pick.m, d.malto),
+      fructose: item('fructose', 'Fructose', pick.f, d.fructose),
+      extra: pick.extra,
+      withinTolerance: !!best
+    };
+  }
+
+  /**
+   * Choose table salt + sodium citrate. Salt takes ~saltSodiumShare % of the
+   * sodium (nearest measure; with a cap it's pinch or ⅛ tsp only), citrate
+   * makes up the rest within ±sodiumTol, never above citrateCapG.
+   */
+  function pickSodium(targetMg, s, caps) {
+    var d = densities(s);
+    var mgPerTspSalt = d.salt * s.saltSodiumPct * 10;
+    var mgPerTspCit = d.citrate * s.citrateSodiumPct * 10;
+    if (!(targetMg > 0)) return { salt: null, citrate: null, sodiumMg: 0, withinTolerance: true, capped: false };
+
+    var saltTsp = targetMg * s.saltSodiumShare / 100 / mgPerTspSalt;
+    var salt = null;
+    if (caps.saltCapTsp != null) {
+      if (saltTsp > EPS) {
+        var choices = [{ measure: PINCH, count: 1, tsp: PINCH.tsp }, { measure: MEASURES[8], count: 1, tsp: 0.125 }]
+          .filter(function (o) { return o.tsp <= caps.saltCapTsp + EPS; });
+        salt = choices.reduce(function (a, b) { return Math.abs(b.tsp - saltTsp) < Math.abs(a.tsp - saltTsp) ? b : a; });
+      }
+    } else if (saltTsp > EPS) {
+      salt = saltTsp < 0.09375 ? { measure: PINCH, count: 1, tsp: PINCH.tsp } : fewestScoops(saltTsp, s.sodiumTolPct / 100);
+    }
+    var saltMg = salt ? salt.tsp * mgPerTspSalt : 0;
+
+    var citTsp = (targetMg - saltMg) / mgPerTspCit;
+    var capTsp = caps.citrateCapG != null ? caps.citrateCapG / d.citrate : Infinity;
+    var opts = measureOptions(citTsp).filter(function (o) { return o.tsp <= capTsp + EPS; });
+    var tol = s.sodiumTolPct / 100;
+    var best = null, closest = null;
+    opts.forEach(function (o) {
+      var err = (saltMg + o.tsp * mgPerTspCit) / targetMg - 1;
+      if (!closest || Math.abs(err) < Math.abs(closest.err)) closest = { o: o, err: err };
+      if (Math.abs(err) > tol + EPS) return;
+      if (!best || o.count < best.o.count || (o.count === best.o.count && Math.abs(err) < Math.abs(best.err))) best = { o: o, err: err };
+    });
+    // If the cap stops us reaching the target, use as much citrate as allowed.
+    if (!best && citTsp > capTsp) {
+      var capOpt = measureOptions(capTsp).filter(function (o) { return o.tsp <= capTsp + EPS; })
+        .reduce(function (a, b) { return !a || b.tsp > a.tsp + EPS || (Math.abs(b.tsp - a.tsp) <= EPS && b.count < a.count) ? b : a; }, null);
+      if (capOpt) closest = { o: capOpt, err: (saltMg + capOpt.tsp * mgPerTspCit) / targetMg - 1 };
+    }
+    var pick = best || closest;
+    var cit = pick && citTsp > EPS ? item('citrate', 'Sodium citrate', pick.o, d.citrate) : null;
+    var saltItem = salt ? item('salt', 'Table salt', salt, d.salt) : null;
+    var total = saltMg + (cit ? cit.tsp * mgPerTspCit : 0);
+    return {
+      salt: saltItem, citrate: cit, sodiumMg: total,
+      withinTolerance: Math.abs(total / targetMg - 1) <= tol + EPS,
+      capped: citTsp > capTsp + EPS
+    };
+  }
+
+  function sumCarbs(items, s) {
+    var c = 0;
+    items.forEach(function (it) {
+      if (!it) return;
+      if (it.key === 'malto') c += it.grams * s.maltoCarbPct / 100;
+      if (it.key === 'fructose') c += it.grams * s.fructoseCarbPct / 100;
+      if (it.key === 'lemon') c += it.grams * s.lemonCarbPct / 100;
+    });
+    return c;
+  }
+  function sumSodium(items, s) {
+    var mg = 0;
+    items.forEach(function (it) {
+      if (!it) return;
+      if (it.key === 'citrate') mg += it.grams * s.citrateSodiumPct * 10;
+      if (it.key === 'salt') mg += it.grams * s.saltSodiumPct * 10;
+    });
+    return mg;
+  }
+  function sumGrams(items) { return items.reduce(function (a, it) { return a + (it ? it.grams : 0); }, 0); }
+  function sumTsp(items) { return items.reduce(function (a, it) { return a + (it ? it.tsp : 0); }, 0); }
+
+  /**
+   * One bottle or one gel flask.
+   * input = { container: 'bottle'|'flask', carbs, highCarb, bottleOz, sodiumMg (optional override) }
+   */
+  function planServing(input, settings) {
+    var s = withDefaults(settings);
+    var d = densities(s);
+    var errors = [], warnings = [];
+    var carbs = input.carbs;
+    var isFlask = input.container === 'flask';
+    if (!(carbs > 0)) errors.push('Carbs per serving must be more than 0.');
+    if (isFlask && carbs > s.flaskMaxCarbs) errors.push('A ' + s.flaskMl + ' mL flask holds at most ' + s.flaskMaxCarbs + ' g carbs.');
+    if (!isFlask && !(input.bottleOz > 0)) errors.push('Pick a bottle size.');
+    if (input.sodiumMg != null && !(input.sodiumMg >= 0)) errors.push('Sodium can’t be negative.');
+    if (errors.length) return { ok: false, errors: errors };
+
+    var ratio = input.highCarb ? 1.25 : 2;
+    var sodiumTarget = input.sodiumMg != null ? input.sodiumMg : carbs * s.sodiumMgPerCarbG;
+    var juiceCarbs = s.juiceCarbsPerTbsp * s.juiceMlPerContainer / (ML_PER_TSP * TSP_PER_TBSP);
+
+    var lemon = s.lemonGPerContainer > 0 ? item('lemon', 'Lemon powder', fewestScoops(s.lemonGPerContainer / d.lemon, s.sodiumTolPct / 100), d.lemon) : null;
+    var na = pickSodium(sodiumTarget, s, { citrateCapG: s.citrateWarnG, saltCapTsp: s.saltCapTsp });
+    var otherG = sumGrams([lemon, na.citrate, na.salt]);
+    var fixedCarbs = sumCarbs([lemon], s) + juiceCarbs;
+    var usableMl = s.flaskMl * s.flaskFillPct / 100;
+    var containerMl = isFlask ? s.flaskMl : flOzToMl(input.bottleOz);
+
+    // Flask: liquid = water + juice ≈ 0.65 mL per g carbs (min 0.55), and
+    // liquid + powder must fit in the usable part of the flask.
+    function flaskCheck(mg, fg, totalCarbs) {
+      var powderMl = (mg + fg + otherG) * s.displacementMlPerG;
+      var targetWater = totalCarbs * s.gelWaterMlPerCarbG - s.juiceMlPerContainer;
+      var best = null;
+      // Every measure, any count that fits; fewest scoops wins.
+      waterOptions(targetWater / ML_PER_TSP, usableMl / ML_PER_TSP).forEach(function (o) {
+        var liquid = o.tsp * ML_PER_TSP + s.juiceMlPerContainer;
+        if (liquid < totalCarbs * s.gelMinWaterMlPerCarbG - EPS) return;
+        if (liquid + powderMl > usableMl + EPS) return;
+        var err = Math.abs(liquid - totalCarbs * s.gelWaterMlPerCarbG);
+        if (!best || o.count < best.o.count || (o.count === best.o.count && err < best.err)) best = { o: o, err: err };
+      });
+      return best ? { ok: true, water: best.o } : { ok: false };
+    }
+
+    var c = pickCarbs(carbs, fixedCarbs, ratio, s, isFlask ? flaskCheck : null);
+    if (!c) return { ok: false, errors: [isFlask ? 'This won’t fit in the flask. Try fewer carbs.' : 'Not enough carbs to make a mix.'] };
+
+    var items = [c.malto, c.fructose, na.citrate, na.salt, lemon].filter(Boolean);
+    var powderG = sumGrams(items);
+    var actualCarbs = sumCarbs(items, s) + juiceCarbs;
+    var actualSodium = sumSodium(items, s);
+    var mc = c.malto.grams * s.maltoCarbPct / 100, fc = c.fructose.grams * s.fructoseCarbPct / 100;
+
+    var water, finalMl;
+    if (isFlask) {
+      var wOpt = c.extra.water;
+      water = { measure: wOpt.measure, count: wOpt.count, ml: wOpt.tsp * ML_PER_TSP, text: formatMeasure(wOpt.measure, wOpt.count) };
+      finalMl = water.ml + s.juiceMlPerContainer + powderG * s.displacementMlPerG;
+    } else {
+      var waterMl = containerMl - s.juiceMlPerContainer - powderG * s.displacementMlPerG;
+      if (waterMl <= 0) return { ok: false, errors: ['The powder won’t fit in this bottle. Try fewer carbs or a bigger bottle.'] };
+      water = { ml: waterMl, text: 'Fill to the top' };
+      finalMl = containerMl;
+    }
+    var conc = actualCarbs / finalMl * 100;
+
+    if (!c.withinTolerance) warnings.push('Couldn’t round to within ±' + s.carbTolPct + '% carbs and the ratio limits; showing the closest.');
+    if (na.capped && !na.withinTolerance) warnings.push('Sodium citrate is capped at ' + s.citrateWarnG + ' g per ' + (isFlask ? 'flask' : 'bottle') + ' (taste and gut comfort), so sodium is lower than the target.');
+    else if (!na.capped && !na.withinTolerance) warnings.push('Sodium is more than ±' + s.sodiumTolPct + '% off target after rounding.');
+    if (!isFlask && conc > s.concWarnPct) warnings.push('Strong mix: ' + conc.toFixed(1) + ' g/100 mL (over ' + s.concWarnPct + '). It may sit heavy; consider a bigger bottle or fewer carbs.');
+
+    return {
+      ok: true, errors: [], warnings: warnings,
+      container: isFlask ? 'flask' : 'bottle',
+      target: { carbs: carbs, sodiumMg: sodiumTarget, ratio: ratio },
+      items: items,
+      juice: { text: '1 Tbsp', ml: s.juiceMlPerContainer, carbs: juiceCarbs },
+      water: water,
+      actual: { carbs: actualCarbs, sodiumMg: actualSodium, ratio: mc / fc, gPer100Ml: conc, finalMl: finalMl, powderG: powderG }
+    };
+  }
+
+  /**
+   * Tub of dry mix (~680 g) plus how much to scoop per serving.
+   * input = { carbs (per serving, juice included), highCarb, sodiumMg (optional, per serving) }
+   */
+  function planTub(input, settings) {
+    var s = withDefaults(settings);
+    var d = densities(s);
+    var carbs = input.carbs;
+    if (!(carbs > 0)) return { ok: false, errors: ['Carbs per serving must be more than 0.'] };
+    if (input.sodiumMg != null && !(input.sodiumMg >= 0)) return { ok: false, errors: ['Sodium can’t be negative.'] };
+
+    var ratio = input.highCarb ? 1.25 : 2;
+    var sodiumTarget = input.sodiumMg != null ? input.sodiumMg : carbs * s.sodiumMgPerCarbG;
+    var juiceCarbs = s.juiceCarbsPerTbsp * s.juiceMlPerContainer / (ML_PER_TSP * TSP_PER_TBSP);
+    var powderCarbs = carbs - juiceCarbs;  // the juice is added when mixing each bottle
+
+    // 1. Exact (unrounded) recipe for one serving
+    var lemonG = s.lemonGPerContainer;
+    var split = powderCarbs - lemonG * s.lemonCarbPct / 100;
+    if (!(split > 0)) return { ok: false, errors: ['Not enough carbs to make a mix.'] };
+    var maltoG = split * ratio / (1 + ratio) / (s.maltoCarbPct / 100);
+    var fructoseG = split / (1 + ratio) / (s.fructoseCarbPct / 100);
+    var na1 = splitSodium(sodiumTarget, s);
+    var servingG = maltoG + fructoseG + na1.citrateG + na1.saltG + lemonG;
+
+    // 2. Scale up to fill the tub, then round each ingredient
+    var n = s.tubTargetG / servingG;
+    var lemon = lemonG > 0 ? item('lemon', 'Lemon powder', fewestScoops(n * lemonG / d.lemon, s.sodiumTolPct / 100), d.lemon) : null;
+    var na = pickSodium(n * sodiumTarget, s, { citrateCapG: null, saltCapTsp: null });
+    var c = pickCarbs(n * powderCarbs, sumCarbs([lemon], s), ratio, s, null);
+    if (!c) return { ok: false, errors: ['Not enough carbs to make a mix.'] };
+
+    var items = [c.malto, c.fructose, na.citrate, na.salt, lemon].filter(Boolean);
+    var batchG = sumGrams(items);
+    var batchCarbs = sumCarbs(items, s);
+    var batchSodium = sumSodium(items, s);
+    var mc = c.malto.grams * s.maltoCarbPct / 100, fc = c.fructose.grams * s.fructoseCarbPct / 100;
+
+    // 3. Mix density from the ingredient densities (approximate)
+    var gPerTsp = batchG / sumTsp(items);
+    var carbsPerG = batchCarbs / batchG, sodiumPerG = batchSodium / batchG;
+
+    // 4. Serving scoop: one measure, within carb tolerance, fewest scoops
+    var targetTsp = powderCarbs / carbsPerG / gPerTsp;
+    var best = null, closest = null;
+    measureOptions(targetTsp).forEach(function (o) {
+      var g = o.tsp * gPerTsp;
+      var err = (g * carbsPerG + juiceCarbs) / carbs - 1;
+      if (!closest || Math.abs(err) < Math.abs(closest.err)) closest = { o: o, err: err };
+      if (Math.abs(err) > s.carbTolPct / 100 + EPS) return;
+      if (!best || o.count < best.o.count || (o.count === best.o.count && Math.abs(err) < Math.abs(best.err))) best = { o: o, err: err };
+    });
+    var pick = best || closest;
+    var scoopG = pick.o.tsp * gPerTsp;
+    var warnings = [];
+    if (!c.withinTolerance) warnings.push('Couldn’t round the tub recipe within the carb and ratio limits; showing the closest.');
+    if (!best) warnings.push('No single measure lands within ±' + s.carbTolPct + '% of your carb target; showing the closest.');
+    var scoopSodium = scoopG * sodiumPerG;
+    if (Math.abs(scoopSodium / sodiumTarget - 1) > s.sodiumTolPct / 100 + EPS && sodiumTarget > 0) {
+      warnings.push('Sodium per scoop is more than ±' + s.sodiumTolPct + '% off target after rounding.');
+    }
+
+    return {
+      ok: true, errors: [], warnings: warnings,
+      container: 'tub',
+      target: { carbs: carbs, sodiumMg: sodiumTarget, ratio: ratio },
+      items: items,
+      batch: { grams: batchG, carbs: batchCarbs, sodiumMg: batchSodium, ratio: mc / fc, gPerTsp: gPerTsp, servings: batchG / scoopG },
+      scoop: {
+        measure: pick.o.measure, count: pick.o.count, tsp: pick.o.tsp,
+        text: formatMeasure(pick.o.measure, pick.o.count), grams: scoopG,
+        carbs: scoopG * carbsPerG + juiceCarbs, sodiumMg: scoopSodium, ratio: mc / fc
+      },
+      juice: { text: '1 Tbsp', carbs: juiceCarbs }
+    };
+  }
+
   var api = {
     DEFAULT_SETTINGS: DEFAULT_SETTINGS,
     RATIO_PRESETS: RATIO_PRESETS,
@@ -351,7 +729,15 @@
     tspFor: tspFor,
     roundTsp: roundTsp,
     formatTsp: formatTsp,
-    formatMinutes: formatMinutes
+    formatMinutes: formatMinutes,
+    MEASURES: MEASURES,
+    formatMeasure: formatMeasure,
+    measureOptions: measureOptions,
+    nearestMeasure: nearestMeasure,
+    pickCarbs: pickCarbs,
+    pickSodium: pickSodium,
+    planServing: planServing,
+    planTub: planTub
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

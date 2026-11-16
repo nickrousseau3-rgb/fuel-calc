@@ -39,7 +39,7 @@
   test('worked example: 135 g carbs per bottle', function () { near(r.perContainer.carbs, 135); });
   test('worked example: maltodextrin 77.46 g per bottle', function () { near(r.perContainer.maltoG, 77.46); });
   test('worked example: fructose 58.87 g per bottle', function () { near(r.perContainer.fructoseG, 58.87); });
-  test('worked example: sodium citrate 3.81 g per bottle', function () { near(r.perContainer.citrateG, 3.814); });
+  test('worked example: sodium citrate 3.80 g per bottle', function () { near(r.perContainer.citrateG, 3.798); });
   test('worked example: table salt 0.40 g per bottle', function () { near(r.perContainer.saltG, 0.404); });
   test('worked example: citric acid 2.03 g per bottle', function () { near(r.perContainer.citricG, 2.025); });
   test('worked example: water ≈ 619.5 mL per bottle', function () { near(r.perContainer.waterMl, 619.5, 0.1); });
@@ -140,6 +140,120 @@
   test('powder that cannot fit in a bottle gives a warning', function () {
     var x = FC.calculate({ hours: 8, carbsPerHour: 120, sodiumPerHour: 700, ratio: 'auto', format: 'bottle', containerMl: 500, containers: 1, lemonG: 3 });
     ok(x.warnings.some(function (w) { return /won’t fit/.test(w); }));
+  });
+
+  // ==================================================================
+  // MAIN SCREEN: single-measure rounding
+  // ==================================================================
+  var S = FC.withDefaults();
+  var ONE_MEASURE = /^(\d+ (cups?|Tbsp|tsp)|(\d+ × )?[½⅓¼⅛] (cup|tsp)|pinch)$/;
+  function singleMeasures(items) {
+    items.forEach(function (it) { ok(ONE_MEASURE.test(it.text), it.name + ' is not one measure: "' + it.text + '"'); });
+  }
+  function within(actual, target, pct, label) {
+    ok(Math.abs(actual / target - 1) <= pct / 100 + 1e-9, label + ': ' + actual.toFixed(1) + ' is not within ±' + pct + '% of ' + target);
+  }
+
+  test('measure text: 4 Tbsp / 3 × ½ tsp / 2 cups / ⅓ cup', function () {
+    var M = FC.MEASURES;
+    equal(FC.formatMeasure(M[4], 4), '4 Tbsp');
+    equal(FC.formatMeasure(M[6], 3), '3 × ½ tsp');
+    equal(FC.formatMeasure(M[0], 2), '2 cups');
+    equal(FC.formatMeasure(M[2], 1), '⅓ cup');
+  });
+
+  // Spot check 1: 24 oz bottle, 45 g carbs
+  [false, true].forEach(function (hc) {
+    var b = FC.planServing({ container: 'bottle', carbs: 45, bottleOz: 24, highCarb: hc });
+    var tag = hc ? ' (1:0.8)' : ' (2:1)';
+    test('spot: 24 oz bottle 45 g' + tag + ' works', function () { ok(b.ok, String(b.errors)); });
+    test('spot: 24 oz bottle 45 g' + tag + ' single measures', function () { singleMeasures(b.items); });
+    test('spot: 24 oz bottle 45 g' + tag + ' carbs ±10%', function () { within(b.actual.carbs, 45, 10, 'carbs'); });
+    test('spot: 24 oz bottle 45 g' + tag + ' sodium ±20% of 675 mg', function () { within(b.actual.sodiumMg, 675, 20, 'sodium'); });
+    test('spot: 24 oz bottle 45 g' + tag + ' ratio ±15%', function () { within(b.actual.ratio, hc ? 1.25 : 2, 15, 'ratio'); });
+    test('spot: 24 oz bottle 45 g' + tag + ' no warnings', function () { equal(b.warnings.length, 0, 'warnings'); });
+  });
+  test('spot: bottle totals are recomputed from the rounded measures', function () {
+    var b = FC.planServing({ container: 'bottle', carbs: 45, bottleOz: 24, highCarb: false });
+    var carbs = 0;
+    b.items.forEach(function (it) {
+      if (it.key === 'malto') carbs += it.grams * 0.95;
+      if (it.key === 'fructose') carbs += it.grams;
+      if (it.key === 'lemon') carbs += it.grams * 0.85;
+    });
+    near(b.actual.carbs, carbs + b.juice.carbs, 1e-9);
+    near(b.actual.gPer100Ml, b.actual.carbs / FC.flOzToMl(24) * 100, 1e-9);
+  });
+
+  // Spot check 2: gel flask, 100 g carbs
+  [false, true].forEach(function (hc) {
+    var f = FC.planServing({ container: 'flask', carbs: 100, highCarb: hc });
+    var tag = hc ? ' (1:0.8)' : ' (2:1)';
+    test('spot: gel 100 g' + tag + ' works', function () { ok(f.ok, String(f.errors)); });
+    test('spot: gel 100 g' + tag + ' single measures (incl. water)', function () {
+      singleMeasures(f.items);
+      ok(ONE_MEASURE.test(f.water.text), 'water: ' + f.water.text);
+    });
+    test('spot: gel 100 g' + tag + ' carbs ±10%', function () { within(f.actual.carbs, 100, 10, 'carbs'); });
+    test('spot: gel 100 g' + tag + ' sodium ±20%', function () { within(f.actual.sodiumMg, 1500, 20, 'sodium'); });
+    test('spot: gel 100 g' + tag + ' fits in 135 mL', function () { ok(f.actual.finalMl <= 135 + 1e-9, f.actual.finalMl + ' mL'); });
+    test('spot: gel 100 g' + tag + ' liquid ≥ 0.55 mL per g carbs', function () {
+      ok(f.water.ml + f.juice.ml >= f.actual.carbs * 0.55 - 1e-9);
+    });
+    test('spot: gel 100 g' + tag + ' citrate capped at 4.5 g', function () {
+      var cit = f.items.filter(function (i) { return i.key === 'citrate'; })[0];
+      ok(cit.grams <= 4.5 + 1e-9, cit.grams + ' g');
+    });
+  });
+  test('gel over 100 g is rejected', function () { ok(!FC.planServing({ container: 'flask', carbs: 101 }).ok); });
+
+  // Spot check 3: tub, 40 g per serving
+  [false, true].forEach(function (hc) {
+    var t = FC.planTub({ carbs: 40, highCarb: hc });
+    var tag = hc ? ' (1:0.8)' : ' (2:1)';
+    test('spot: tub 40 g' + tag + ' works', function () { ok(t.ok, String(t.errors)); });
+    test('spot: tub 40 g' + tag + ' batch is single measures', function () { singleMeasures(t.items); });
+    test('spot: tub 40 g' + tag + ' batch ≈ 680 g (±10%)', function () { within(t.batch.grams, 680, 10, 'batch'); });
+    test('spot: tub 40 g' + tag + ' scoop is one measure', function () { ok(ONE_MEASURE.test(t.scoop.text), t.scoop.text); });
+    test('spot: tub 40 g' + tag + ' scoop carbs ±10%', function () { within(t.scoop.carbs, 40, 10, 'carbs'); });
+    test('spot: tub 40 g' + tag + ' scoop sodium ±20%', function () { within(t.scoop.sodiumMg, 600, 20, 'sodium'); });
+    test('spot: tub 40 g' + tag + ' ratio ±15%', function () { within(t.batch.ratio, hc ? 1.25 : 2, 15, 'ratio'); });
+  });
+
+  // Rules
+  test('salt below ⅛ tsp shows as "pinch"', function () {
+    var b = FC.planServing({ container: 'bottle', carbs: 45, bottleOz: 24 });
+    equal(b.items.filter(function (i) { return i.key === 'salt'; })[0].text, 'pinch');
+  });
+  test('sodium override is used', function () {
+    var b = FC.planServing({ container: 'bottle', carbs: 45, bottleOz: 24, sodiumMg: 300 });
+    near(b.target.sodiumMg, 300); within(b.actual.sodiumMg, 300, 20, 'sodium');
+  });
+  test('sodium override 0 → no citrate or salt', function () {
+    var b = FC.planServing({ container: 'bottle', carbs: 45, bottleOz: 24, sodiumMg: 0 });
+    ok(!b.items.some(function (i) { return i.key === 'citrate' || i.key === 'salt'; }));
+  });
+  test('strong bottle warns over 12 g/100 mL', function () {
+    var b = FC.planServing({ container: 'bottle', carbs: 90, bottleOz: 15 });
+    ok(b.warnings.some(function (w) { return /Strong mix/.test(w); }));
+  });
+  test('sweep 20–100 g, all containers and ratios: within tolerance', function () {
+    for (var c = 20; c <= 100; c += 5) {
+      [false, true].forEach(function (hc) {
+        [15, 21, 24].forEach(function (oz) {
+          var b = FC.planServing({ container: 'bottle', carbs: c, bottleOz: oz, highCarb: hc });
+          ok(b.ok, 'bottle ' + c + ' g ' + oz + ' oz');
+          within(b.actual.carbs, c, 10, 'bottle ' + c + ' g ' + oz + ' oz carbs');
+          singleMeasures(b.items);
+        });
+        var f = FC.planServing({ container: 'flask', carbs: c, highCarb: hc });
+        ok(f.ok, 'flask ' + c + ' g');
+        within(f.actual.carbs, c, 10, 'flask ' + c + ' g carbs');
+        ok(f.actual.finalMl <= 135 + 1e-9, 'flask ' + c + ' g volume');
+        var t = FC.planTub({ carbs: c, highCarb: hc });
+        ok(t.ok && t.warnings.length === 0, 'tub ' + c + ' g: ' + (t.errors || t.warnings));
+      });
+    }
   });
 
   // ---------- report ----------

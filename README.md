@@ -54,12 +54,12 @@ The ride: 3 h at 90 g carbs/h, 700 mg sodium/h, 2 × 24 oz (709.8 mL) bottles, 3
 
 4. Sodium per bottle = 3 × 700 ÷ 2 = 1050 mg.
    - Table salt share = 15% × 1050 = 157.5 mg (under the ⅛ tsp cap of 292.5 mg), so **157.5 ÷ 390 = 0.40 g of salt**
-   - Sodium citrate = 1050 − 157.5 = 892.5 mg, so **892.5 ÷ 234 = 3.81 g of sodium citrate** (under the 4.5 g warning)
+   - Sodium citrate = 1050 − 157.5 = 892.5 mg, so **892.5 ÷ 235 = 3.80 g of sodium citrate** (under the 4.5 g warning)
 
 **Citric acid, water and drinking rate**
 
 5. Citric acid = 135 × 0.015 = **2.03 g**.
-6. Powder = 77.46 + 58.87 + 3.81 + 0.40 + 3 + 2.03 = 145.57 g. It takes up 145.57 × 0.62 = 90.25 mL.
+6. Powder = 77.46 + 58.87 + 3.80 + 0.40 + 3 + 2.03 = 145.56 g. It takes up 145.56 × 0.62 = 90.25 mL.
    - Water = 709.76 − 90.25 = **619.5 mL** (about 21 fl oz)
 7. Concentration = 135 ÷ 709.76 × 100 = **19.0 g per 100 mL**. That's over 12%, so the app shows a warning.
 8. Drinking rate = 60 × 135 ÷ 90 = **1 bottle every 90 min**.
