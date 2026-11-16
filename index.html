@@ -195,7 +195,7 @@
       <p class="hint" id="s-container-hint"></p>
       <div class="field" data-sfield="carbs"><label for="f-s-carbs">Carbs per serving <span class="unit" id="s-carbs-unit">g</span></label></div>
       <label class="switch-row" for="s-race-fueling">
-        <span>Race fueling (75+ g/hr)<br><span class="small muted" id="s-ratio-hint">2:1 maltodextrin : fructose</span></span>
+        <span>Race fueling (75+ g/hr)<br><span class="small muted" id="s-ratio-hint">Using 2:1 (everyday)</span></span>
         <input type="checkbox" id="s-race-fueling" role="switch" aria-describedby="s-ratio-hint">
       </label>
       <details class="advanced" id="s-advanced">
@@ -943,7 +943,7 @@
     document.getElementById('s-carbs-unit').textContent = 'g per ' + noun;
     document.getElementById('s-race-fueling').checked = simple.raceFueling;
     document.getElementById('s-ratio-hint').textContent = simple.raceFueling
-      ? '1:0.8 maltodextrin : fructose' : '2:1 maltodextrin : fructose';
+      ? 'Using 1:0.8 (race)' : 'Using 2:1 (everyday)';
     var autoNa = Math.round((simple.carbs[c] || 0) * settings.sodiumMgPerCarbG);
     document.getElementById('s-sodium-hint').textContent = 'Leave blank for ' + settings.sodiumMgPerCarbG + ' mg per g carbs (' + autoNa + ' mg).';
     fillSimpleInputs();
