@@ -556,7 +556,7 @@
 
   /**
    * One bottle or one gel flask.
-   * input = { container: 'bottle'|'flask', carbs, highCarb, bottleOz, sodiumMg (optional override) }
+   * input = { container: 'bottle'|'flask', carbs, raceFueling, bottleOz, sodiumMg (optional override) }
    */
   function planServing(input, settings) {
     var s = withDefaults(settings);
@@ -570,7 +570,7 @@
     if (input.sodiumMg != null && !(input.sodiumMg >= 0)) errors.push('Sodium can’t be negative.');
     if (errors.length) return { ok: false, errors: errors };
 
-    var ratio = input.highCarb ? 1.25 : 2;
+    var ratio = input.raceFueling ? 1.25 : 2;
     var sodiumTarget = input.sodiumMg != null ? input.sodiumMg : carbs * s.sodiumMgPerCarbG;
     var juiceCarbs = s.juiceCarbsPerTbsp * s.juiceMlPerContainer / (ML_PER_TSP * TSP_PER_TBSP);
 
@@ -638,7 +638,7 @@
 
   /**
    * Tub of dry mix (~680 g) plus how much to scoop per serving.
-   * input = { carbs (per serving, juice included), highCarb, sodiumMg (optional, per serving) }
+   * input = { carbs (per serving, juice included), raceFueling, sodiumMg (optional, per serving) }
    */
   function planTub(input, settings) {
     var s = withDefaults(settings);
@@ -647,7 +647,7 @@
     if (!(carbs > 0)) return { ok: false, errors: ['Carbs per serving must be more than 0.'] };
     if (input.sodiumMg != null && !(input.sodiumMg >= 0)) return { ok: false, errors: ['Sodium can’t be negative.'] };
 
-    var ratio = input.highCarb ? 1.25 : 2;
+    var ratio = input.raceFueling ? 1.25 : 2;
     var sodiumTarget = input.sodiumMg != null ? input.sodiumMg : carbs * s.sodiumMgPerCarbG;
     var juiceCarbs = s.juiceCarbsPerTbsp * s.juiceMlPerContainer / (ML_PER_TSP * TSP_PER_TBSP);
     var powderCarbs = carbs - juiceCarbs;  // the juice is added when mixing each bottle

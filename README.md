@@ -25,7 +25,8 @@ Clearing Safari website data deletes them.
 ## How it works
 
 Pick **Bottle** (15 / 21 / 24 oz), **Gel flask** (150 mL HydraPak, up to 100 g carbs) or **Tub** (about 680 g of dry mix).
-Then enter carbs per serving, and switch on **High-carb (1:0.8)** if you want that ratio instead of 2:1.
+Then enter carbs per serving, and switch on **Race fueling (75+ g/hr)** to split the carbs 1:0.8 maltodextrin : fructose instead of 2:1.
+The switch changes the split, not the total carbs.
 Sodium defaults to 15 mg per g of carbs; you can override it under **Advanced**.
 
 Every ingredient is shown as **one measure used N times** ("4 Tbsp", "3 × ⅛ tsp"), using only

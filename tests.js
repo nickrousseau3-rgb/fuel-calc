@@ -163,18 +163,18 @@
   });
 
   // Spot check 1: 24 oz bottle, 45 g carbs
-  [false, true].forEach(function (hc) {
-    var b = FC.planServing({ container: 'bottle', carbs: 45, bottleOz: 24, highCarb: hc });
-    var tag = hc ? ' (1:0.8)' : ' (2:1)';
+  [false, true].forEach(function (race) {
+    var b = FC.planServing({ container: 'bottle', carbs: 45, bottleOz: 24, raceFueling: race });
+    var tag = race ? ' (1:0.8)' : ' (2:1)';
     test('spot: 24 oz bottle 45 g' + tag + ' works', function () { ok(b.ok, String(b.errors)); });
     test('spot: 24 oz bottle 45 g' + tag + ' single measures', function () { singleMeasures(b.items); });
     test('spot: 24 oz bottle 45 g' + tag + ' carbs ±10%', function () { within(b.actual.carbs, 45, 10, 'carbs'); });
     test('spot: 24 oz bottle 45 g' + tag + ' sodium ±20% of 675 mg', function () { within(b.actual.sodiumMg, 675, 20, 'sodium'); });
-    test('spot: 24 oz bottle 45 g' + tag + ' ratio ±15%', function () { within(b.actual.ratio, hc ? 1.25 : 2, 15, 'ratio'); });
+    test('spot: 24 oz bottle 45 g' + tag + ' ratio ±15%', function () { within(b.actual.ratio, race ? 1.25 : 2, 15, 'ratio'); });
     test('spot: 24 oz bottle 45 g' + tag + ' no warnings', function () { equal(b.warnings.length, 0, 'warnings'); });
   });
   test('spot: bottle totals are recomputed from the rounded measures', function () {
-    var b = FC.planServing({ container: 'bottle', carbs: 45, bottleOz: 24, highCarb: false });
+    var b = FC.planServing({ container: 'bottle', carbs: 45, bottleOz: 24, raceFueling: false });
     var carbs = 0;
     b.items.forEach(function (it) {
       if (it.key === 'malto') carbs += it.grams * 0.95;
@@ -186,9 +186,9 @@
   });
 
   // Spot check 2: gel flask, 100 g carbs
-  [false, true].forEach(function (hc) {
-    var f = FC.planServing({ container: 'flask', carbs: 100, highCarb: hc });
-    var tag = hc ? ' (1:0.8)' : ' (2:1)';
+  [false, true].forEach(function (race) {
+    var f = FC.planServing({ container: 'flask', carbs: 100, raceFueling: race });
+    var tag = race ? ' (1:0.8)' : ' (2:1)';
     test('spot: gel 100 g' + tag + ' works', function () { ok(f.ok, String(f.errors)); });
     test('spot: gel 100 g' + tag + ' single measures (incl. water)', function () {
       singleMeasures(f.items);
@@ -208,16 +208,16 @@
   test('gel over 100 g is rejected', function () { ok(!FC.planServing({ container: 'flask', carbs: 101 }).ok); });
 
   // Spot check 3: tub, 40 g per serving
-  [false, true].forEach(function (hc) {
-    var t = FC.planTub({ carbs: 40, highCarb: hc });
-    var tag = hc ? ' (1:0.8)' : ' (2:1)';
+  [false, true].forEach(function (race) {
+    var t = FC.planTub({ carbs: 40, raceFueling: race });
+    var tag = race ? ' (1:0.8)' : ' (2:1)';
     test('spot: tub 40 g' + tag + ' works', function () { ok(t.ok, String(t.errors)); });
     test('spot: tub 40 g' + tag + ' batch is single measures', function () { singleMeasures(t.items); });
     test('spot: tub 40 g' + tag + ' batch ≈ 680 g (±10%)', function () { within(t.batch.grams, 680, 10, 'batch'); });
     test('spot: tub 40 g' + tag + ' scoop is one measure', function () { ok(ONE_MEASURE.test(t.scoop.text), t.scoop.text); });
     test('spot: tub 40 g' + tag + ' scoop carbs ±10%', function () { within(t.scoop.carbs, 40, 10, 'carbs'); });
     test('spot: tub 40 g' + tag + ' scoop sodium ±20%', function () { within(t.scoop.sodiumMg, 600, 20, 'sodium'); });
-    test('spot: tub 40 g' + tag + ' ratio ±15%', function () { within(t.batch.ratio, hc ? 1.25 : 2, 15, 'ratio'); });
+    test('spot: tub 40 g' + tag + ' ratio ±15%', function () { within(t.batch.ratio, race ? 1.25 : 2, 15, 'ratio'); });
   });
 
   // Rules
@@ -239,18 +239,18 @@
   });
   test('sweep 20–100 g, all containers and ratios: within tolerance', function () {
     for (var c = 20; c <= 100; c += 5) {
-      [false, true].forEach(function (hc) {
+      [false, true].forEach(function (race) {
         [15, 21, 24].forEach(function (oz) {
-          var b = FC.planServing({ container: 'bottle', carbs: c, bottleOz: oz, highCarb: hc });
+          var b = FC.planServing({ container: 'bottle', carbs: c, bottleOz: oz, raceFueling: race });
           ok(b.ok, 'bottle ' + c + ' g ' + oz + ' oz');
           within(b.actual.carbs, c, 10, 'bottle ' + c + ' g ' + oz + ' oz carbs');
           singleMeasures(b.items);
         });
-        var f = FC.planServing({ container: 'flask', carbs: c, highCarb: hc });
+        var f = FC.planServing({ container: 'flask', carbs: c, raceFueling: race });
         ok(f.ok, 'flask ' + c + ' g');
         within(f.actual.carbs, c, 10, 'flask ' + c + ' g carbs');
         ok(f.actual.finalMl <= 135 + 1e-9, 'flask ' + c + ' g volume');
-        var t = FC.planTub({ carbs: c, highCarb: hc });
+        var t = FC.planTub({ carbs: c, raceFueling: race });
         ok(t.ok && t.warnings.length === 0, 'tub ' + c + ' g: ' + (t.errors || t.warnings));
       });
     }

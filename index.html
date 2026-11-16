@@ -194,9 +194,9 @@
       </div>
       <p class="hint" id="s-container-hint"></p>
       <div class="field" data-sfield="carbs"><label for="f-s-carbs">Carbs per serving <span class="unit" id="s-carbs-unit">g</span></label></div>
-      <label class="switch-row" for="s-highcarb">
-        <span>High-carb (1:0.8)<br><span class="small muted" id="s-ratio-hint">Off: 2:1 maltodextrin : fructose</span></span>
-        <input type="checkbox" id="s-highcarb" role="switch">
+      <label class="switch-row" for="s-race-fueling">
+        <span>Race fueling (75+ g/hr)<br><span class="small muted" id="s-ratio-hint">2:1 maltodextrin : fructose</span></span>
+        <input type="checkbox" id="s-race-fueling" role="switch" aria-describedby="s-ratio-hint">
       </label>
       <details class="advanced" id="s-advanced">
         <summary>Advanced</summary>
@@ -863,12 +863,12 @@
   });
 
   // =====================================================================
-  // Main screen: container, carbs per serving, high-carb, Advanced
+  // Main screen: container, carbs per serving, race fueling (ratio), Advanced
   // =====================================================================
   var SKEY = 'fuelcalc.simple.v1';
   function defaultSimple() {
     return {
-      container: 'bottle', bottleOz: 24, highCarb: false,
+      container: 'bottle', bottleOz: 24, raceFueling: false,  // race fueling = 1:0.8 ratio
       carbs: { bottle: 45, flask: 100, tub: 40 },
       sodium: { bottle: null, flask: null, tub: null }  // null = automatic
     };
@@ -878,7 +878,9 @@
     if (!saved || typeof saved !== 'object') return d;
     if (['bottle', 'flask', 'tub'].indexOf(saved.container) >= 0) d.container = saved.container;
     if ([15, 21, 24].indexOf(saved.bottleOz) >= 0) d.bottleOz = saved.bottleOz;
-    if (typeof saved.highCarb === 'boolean') d.highCarb = saved.highCarb;
+    // Older versions saved this switch as `highCarb`.
+    var race = typeof saved.raceFueling === 'boolean' ? saved.raceFueling : saved.highCarb;
+    if (typeof race === 'boolean') d.raceFueling = race;
     ['bottle', 'flask', 'tub'].forEach(function (k) {
       if (saved.carbs && typeof saved.carbs[k] === 'number' && saved.carbs[k] > 0) d.carbs[k] = saved.carbs[k];
       if (saved.sodium && typeof saved.sodium[k] === 'number' && saved.sodium[k] >= 0) d.sodium[k] = saved.sodium[k];
@@ -918,7 +920,7 @@
   }
   bindSeg('#s-container', function () { return simple.container; }, function (v) { simple.container = v; }, function () { updateSimple(); });
   bindSeg('#s-size', function () { return String(simple.bottleOz); }, function (v) { simple.bottleOz = Number(v); }, function () { updateSimple(); });
-  document.getElementById('s-highcarb').addEventListener('change', function (e) { simple.highCarb = e.target.checked; updateSimple(); });
+  document.getElementById('s-race-fueling').addEventListener('change', function (e) { simple.raceFueling = e.target.checked; updateSimple(); });
 
   function pct(actual, target) {
     if (!(target > 0)) return '';
@@ -939,17 +941,17 @@
       : c === 'tub' ? 'A tub of about ' + settings.tubTargetG + ' g dry mix, scooped one serving per bottle' : '';
     show('s-container-hint', c !== 'bottle');
     document.getElementById('s-carbs-unit').textContent = 'g per ' + noun;
-    document.getElementById('s-highcarb').checked = simple.highCarb;
-    document.getElementById('s-ratio-hint').textContent = simple.highCarb
-      ? 'On: 1:0.8 maltodextrin : fructose, for 75+ g/h' : 'Off: 2:1 maltodextrin : fructose';
+    document.getElementById('s-race-fueling').checked = simple.raceFueling;
+    document.getElementById('s-ratio-hint').textContent = simple.raceFueling
+      ? '1:0.8 maltodextrin : fructose' : '2:1 maltodextrin : fructose';
     var autoNa = Math.round((simple.carbs[c] || 0) * settings.sodiumMgPerCarbG);
     document.getElementById('s-sodium-hint').textContent = 'Leave blank for ' + settings.sodiumMgPerCarbG + ' mg per g carbs (' + autoNa + ' mg).';
     fillSimpleInputs();
 
-    var input = { carbs: simple.carbs[c], highCarb: simple.highCarb, sodiumMg: simple.sodium[c] };
+    var input = { carbs: simple.carbs[c], raceFueling: simple.raceFueling, sodiumMg: simple.sodium[c] };
     if (input.sodiumMg != null && !isFinite(input.sodiumMg)) input.sodiumMg = NaN;
     var r = c === 'tub' ? FC.planTub(input, settings)
-      : FC.planServing({ container: c, carbs: input.carbs, highCarb: input.highCarb, sodiumMg: input.sodiumMg, bottleOz: simple.bottleOz }, settings);
+      : FC.planServing({ container: c, carbs: input.carbs, raceFueling: input.raceFueling, sodiumMg: input.sodiumMg, bottleOz: simple.bottleOz }, settings);
 
     var errs = document.getElementById('s-errors');
     errs.textContent = '';
@@ -978,7 +980,7 @@
 
     if (c === 'tub') {
       document.getElementById('s-title').textContent = 'Tub recipe · about ' + Math.round(r.batch.grams) + ' g';
-      line(totals, 'Makes', 'about ' + Math.round(r.batch.servings) + ' servings · ratio ' + ratioText(r.batch.ratio, simple.highCarb));
+      line(totals, 'Makes', 'about ' + Math.round(r.batch.servings) + ' servings · ratio ' + ratioText(r.batch.ratio, simple.raceFueling));
       scoop.appendChild(el('h3', null, 'Each serving'));
       scoop.appendChild(el('div', 'scoop', r.scoop.text + ' of mix'));
       scoop.appendChild(el('div', 'small muted', 'about ' + g(r.scoop.grams) + ' · then add 1 Tbsp lemon/lime juice and fill the bottle with water'));
@@ -993,7 +995,7 @@
       var a = r.actual;
       line(totals, 'Actual:', Math.round(a.carbs) + ' g carbs' + pct(a.carbs, r.target.carbs) +
         ' · ' + mg(a.sodiumMg) + ' sodium' + pct(a.sodiumMg, r.target.sodiumMg));
-      line(totals, null, 'Ratio ' + ratioText(a.ratio, simple.highCarb) + ' · ' + a.gPer100Ml.toFixed(1) + ' g per 100 mL' +
+      line(totals, null, 'Ratio ' + ratioText(a.ratio, simple.raceFueling) + ' · ' + a.gPer100Ml.toFixed(1) + ' g per 100 mL' +
         (c === 'flask' ? ' · ' + Math.round(a.finalMl) + ' of 135 mL' : ''));
       if (c === 'flask') notes.appendChild(el('div', 'note', 'Follow each squeeze with 2–3 gulps of plain water.'));
     }
