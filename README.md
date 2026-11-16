@@ -22,6 +22,28 @@ Add to your iPhone home screen: open the link in **Safari** → Share button →
 Your settings and saved recipes are stored on that device only (in the browser's localStorage).
 Clearing Safari website data deletes them.
 
+## How it works
+
+Pick **Bottle** (15 / 21 / 24 oz), **Gel flask** (150 mL HydraPak, up to 100 g carbs) or **Tub** (about 680 g of dry mix).
+Then enter carbs per serving, and switch on **High-carb (1:0.8)** if you want that ratio instead of 2:1.
+Sodium defaults to 15 mg per g of carbs; you can override it under **Advanced**.
+
+Every ingredient is shown as **one measure used N times** ("4 Tbsp", "3 × ⅛ tsp"), using only
+1, ½, ⅓, ¼ cup, 1 Tbsp, and 1, ½, ¼, ⅛ tsp. The app picks the fewest scoops that keep:
+
+- carbs within ±10% of your target
+- sodium within ±20%
+- the maltodextrin : fructose ratio within ±15% (2:1 → 1.7–2.3)
+
+It then shows the **actual** totals from the rounded amounts.
+Fresh lemon/lime juice (1 Tbsp) goes in every bottle and flask.
+
+### Hidden: ride planning
+
+Per-hour targets, matching a commercial drink, ride duration, bottle counts, a custom ratio and saved recipes
+are hidden, not deleted. To bring them back, set `FEATURES.ridePlanning = true` in `index.html`,
+or open the app with `?ridePlanning=1` at the end of the address.
+
 ## Deploy (GitHub Pages)
 
 1. On github.com open the repo → **Settings** → **Pages**.

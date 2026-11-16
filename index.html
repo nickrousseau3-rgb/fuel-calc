@@ -120,6 +120,39 @@
   #recipes .rname { font-weight: 700; overflow-wrap: anywhere; }
   #storage-note:empty { display: none; }
 
+  /* ---------- main screen ---------- */
+  body.no-bar { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+  .label { font-weight: 600; margin: 0 0 8px; display: flex; justify-content: space-between; }
+  .label .unit { color: var(--muted); font-weight: 500; }
+  .switch-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    min-height: 56px; margin-top: 14px; font-weight: 600; cursor: pointer;
+  }
+  .switch-row input {
+    appearance: none; -webkit-appearance: none; flex: none; margin: 0;
+    width: 64px; height: 36px; border-radius: 18px; background: var(--btn); border: 2px solid var(--line);
+    position: relative; transition: background .15s;
+  }
+  .switch-row input::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 28px; height: 28px; border-radius: 50%;
+    background: var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.35); transition: transform .15s;
+  }
+  .switch-row input:checked { background: var(--accent); border-color: var(--accent); }
+  .switch-row input:checked::after { transform: translateX(28px); }
+  .switch-row input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  details.advanced { margin-top: 10px; border-top: 1px solid var(--line); }
+  details.advanced summary {
+    min-height: 52px; display: flex; align-items: center; font-weight: 600; color: var(--muted);
+    cursor: pointer; list-style: none;
+  }
+  details.advanced summary::-webkit-details-marker { display: none; }
+  details.advanced summary::before { content: "▸"; display: inline-block; width: 20px; transition: transform .15s; }
+  details.advanced[open] summary::before { transform: rotate(90deg); }
+  .totals { margin-top: 14px; padding-top: 12px; border-top: 2px solid var(--text); font-size: 16px; line-height: 1.6; }
+  .totals strong { font-size: 17px; }
+  .scoop { font-size: 26px; font-weight: 800; line-height: 1.2; margin: 4px 0 2px; }
+  h3 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 20px 0 4px; }
+
   /* ---------- settings sheet ---------- */
   dialog {
     width: 100%; max-width: 640px; max-height: 92vh; margin: auto auto 0; padding: 0;
@@ -142,6 +175,52 @@
     <button class="icon-btn" id="open-settings" aria-label="Ingredient settings">⚙️</button>
   </header>
 
+  <!-- ===== Main screen ===== -->
+  <div id="simple">
+    <div class="seg" id="s-container" role="group" aria-label="Container">
+      <button type="button" data-value="bottle">Bottle</button>
+      <button type="button" data-value="flask">Gel flask</button>
+      <button type="button" data-value="tub">Tub</button>
+    </div>
+
+    <section class="card">
+      <div id="s-size-wrap">
+        <p class="label">Bottle size</p>
+        <div class="seg" id="s-size" role="group" aria-label="Bottle size">
+          <button type="button" data-value="15">15 oz</button>
+          <button type="button" data-value="21">21 oz</button>
+          <button type="button" data-value="24">24 oz</button>
+        </div>
+      </div>
+      <p class="hint" id="s-container-hint"></p>
+      <div class="field" data-sfield="carbs"><label for="f-s-carbs">Carbs per serving <span class="unit" id="s-carbs-unit">g</span></label></div>
+      <label class="switch-row" for="s-highcarb">
+        <span>High-carb (1:0.8)<br><span class="small muted" id="s-ratio-hint">Off: 2:1 maltodextrin : fructose</span></span>
+        <input type="checkbox" id="s-highcarb" role="switch">
+      </label>
+      <details class="advanced" id="s-advanced">
+        <summary>Advanced</summary>
+        <div class="field" data-sfield="sodium"><label for="f-s-sodium">Sodium per serving <span class="unit">mg</span></label></div>
+        <p class="hint" id="s-sodium-hint"></p>
+      </details>
+    </section>
+
+    <section class="card" aria-live="polite">
+      <h2 id="s-title">Your mix</h2>
+      <div class="errors" id="s-errors"></div>
+      <div id="s-body">
+        <table><tbody id="s-rows"></tbody></table>
+        <div id="s-scoop"></div>
+        <div class="totals" id="s-totals"></div>
+        <div id="s-notes"></div>
+        <div id="s-warnings"></div>
+      </div>
+    </section>
+    <p class="hint" style="text-align:center">Level spoons. Weigh a level spoon of each powder once and enter it in ⚙️ Settings for best accuracy.</p>
+  </div>
+
+  <!-- ===== Ride planning (hidden unless FEATURES.ridePlanning) ===== -->
+  <div id="legacy">
   <!-- What are we making? -->
   <div class="seg" id="mode" role="group" aria-label="What to make">
     <button type="button" data-value="bottle">Bottle</button>
@@ -242,6 +321,7 @@
   </section>
 
   <p class="hint" style="text-align:center">Amounts are for level spoons. Weigh a level spoon of each powder once and enter it in ⚙️ Settings for best accuracy.</p>
+  </div>
 </main>
 
 <button id="bar" type="button" aria-label="Jump to results"></button>
@@ -269,6 +349,15 @@
 (function () {
   'use strict';
   var FC = window.FuelCalc;
+
+  // =====================================================================
+  // FEATURE FLAG. Ride planning (per-hour targets, matching a commercial
+  // drink, ride duration, bottle counts, custom ratio, saved recipes) is
+  // hidden, not deleted. Set to true to bring it back, or open the app
+  // with ?ridePlanning=1 to try it.
+  // =====================================================================
+  var FEATURES = { ridePlanning: false };
+  try { if (/[?&]ridePlanning=1\b/.test(location.search)) FEATURES.ridePlanning = true; } catch (e) {}
 
   // =====================================================================
   // Storage — every read/write is wrapped so a full or blocked
@@ -386,10 +475,9 @@
     return t === '' ? NaN : Number(t);
   }
 
-  // Build the − input + controls inside each .field[data-field]
-  document.querySelectorAll('.field[data-field]').forEach(function (el) {
-    var name = el.getAttribute('data-field');
-    var f = FIELDS[name];
+  // Build the − input + controls inside a field. f = {get, set, step, min,
+  // max?, dp, optional?}; onChange runs after every change.
+  function buildStepper(el, name, f, onChange) {
     var wrap = document.createElement('div');
     wrap.className = 'stepper';
     var dec = document.createElement('button'); dec.type = 'button'; dec.textContent = '−'; dec.setAttribute('aria-label', 'Decrease');
@@ -402,27 +490,33 @@
     el.appendChild(wrap);
 
     function bump(dir) {
-      var step = val(f.step), min = val(f.min);
+      var step = val(f.step), min = val(f.min), max = f.max == null ? Infinity : val(f.max);
       var v = f.get();
-      if (!isFinite(v)) v = min;
+      if (v == null || !isFinite(v)) v = f.optional ? val(f.placeholder) || min : min;
       v = Math.round((v + dir * step) / step) * step;
-      f.set(Math.max(min, v));
+      f.set(Math.min(max, Math.max(min, v)));
       input.value = fmtNum(f.get(), val(f.dp));
       input.classList.remove('invalid');
-      update();
+      onChange();
     }
     dec.addEventListener('click', function () { bump(-1); });
     inc.addEventListener('click', function () { bump(1); });
     input.addEventListener('input', function () {
+      if (f.optional && input.value.trim() === '') { input.classList.remove('invalid'); f.set(null); onChange(); return; }
       var v = parseNum(input.value);
+      var max = f.max == null ? Infinity : val(f.max);
       var bad = !isFinite(v) || v < val(f.min);
-      input.classList.toggle('invalid', bad);
-      f.set(bad ? NaN : v);
-      update();
+      input.classList.toggle('invalid', bad || v > max);
+      f.set(bad ? NaN : v);  // over the max is kept so the app can say why
+      onChange();
     });
-    input.addEventListener('blur', function () { if (isFinite(f.get())) input.value = fmtNum(f.get(), val(f.dp)); });
+    input.addEventListener('blur', function () { var v = f.get(); if (v != null && isFinite(v)) input.value = fmtNum(v, val(f.dp)); });
     input.addEventListener('focus', function () { setTimeout(function () { try { input.select(); } catch (e) {} }, 0); });
     el._input = input;
+  }
+  document.querySelectorAll('.field[data-field]').forEach(function (el) {
+    var name = el.getAttribute('data-field');
+    buildStepper(el, name, FIELDS[name], function () { update(); });
   });
 
   // Write state values into all inputs (except the one being typed in)
@@ -437,12 +531,13 @@
   }
 
   // Segmented controls
-  function bindSeg(selector, getter, setter) {
+  function bindSeg(selector, getter, setter, onChange) {
     document.querySelectorAll(selector).forEach(function (seg) {
       seg.addEventListener('click', function (e) {
         var b = e.target.closest('button[data-value]');
         if (!b) return;
         setter(b.getAttribute('data-value'));
+        if (onChange) { onChange(); return; }
         fillInputs();
         update();
       });
@@ -700,7 +795,13 @@
     ['Sodium citrate', [['citrateSodiumPct', 'Sodium by weight', '%', true], ['citrateGPerTsp', 'Weight of 1 level tsp', 'g', true]]],
     ['Table salt', [['saltSodiumPct', 'Sodium by weight', '%', true], ['saltGPerTsp', 'Weight of 1 level tsp', 'g', true]]],
     ['Lemon juice powder', [['lemonCarbPct', 'Carbs per 100 g', 'g'], ['lemonGPerTsp', 'Weight of 1 level tsp', 'g', true]]],
-    ['Citric acid', [['citricGPerTsp', 'Weight of 1 level tsp', 'g', true], ['citricGPerCarbG', 'Grams per gram of carbs', 'g']]],
+    ['Citric acid', [['citricGPerTsp', 'Weight of 1 level tsp', 'g', true, 'legacy'], ['citricGPerCarbG', 'Grams per gram of carbs', 'g', false, 'legacy']]],
+    ['Per serving', [
+      ['sodiumMgPerCarbG', 'Sodium per g carbs', 'mg'],
+      ['lemonGPerContainer', 'Lemon powder per serving', 'g'],
+      ['juiceCarbsPerTbsp', 'Carbs in 1 Tbsp juice', 'g'],
+      ['tubTargetG', 'Tub batch size', 'g', true]
+    ]],
     ['Sodium split', [['saltSodiumShare', 'Share of sodium from salt', '%'], ['saltCapTsp', 'Max salt per container', 'tsp']]],
     ['Mixing', [
       ['displacementMlPerG', 'Space 1 g of powder takes', 'mL'],
@@ -708,18 +809,25 @@
       ['gelMinWaterMlPerCarbG', 'Flask minimum water per g carbs', 'mL'],
       ['flaskFillPct', 'Usable part of a flask', '%', true]
     ]],
-    ['Warnings & auto ratio', [
+    ['Rounding tolerance', [
+      ['carbTolPct', 'Carbs within ±', '%', true],
+      ['sodiumTolPct', 'Sodium within ±', '%', true],
+      ['ratioTolPct', 'Ratio within ±', '%', true]
+    ]],
+    ['Limits & warnings', [
       ['concWarnPct', 'Warn above (bottle)', 'g/100 mL', true],
-      ['citrateWarnG', 'Warn above sodium citrate', 'g', true],
-      ['autoRatioCutoff', 'Auto uses 1:0.8 from', 'g/h', true]
+      ['citrateWarnG', 'Max sodium citrate per container', 'g', true],
+      ['autoRatioCutoff', 'Auto uses 1:0.8 from', 'g/h', true, 'legacy']
     ]]
   ];
 
   var dialog = document.getElementById('settings');
   var settingsBox = document.getElementById('settings-fields');
   SETTING_GROUPS.forEach(function (grp) {
+    var rows = grp[1].filter(function (f) { return f[4] !== 'legacy' || FEATURES.ridePlanning; });
+    if (!rows.length) return;
     settingsBox.appendChild(el('h2', null, grp[0])).style.marginTop = '20px';
-    grp[1].forEach(function (f) {
+    rows.forEach(function (f) {
       var rowEl = el('div', 'set-row');
       var lab = el('label', null, f[1] + ' (' + f[2] + ')');
       lab.htmlFor = 's-' + f[0];
@@ -740,7 +848,7 @@
   });
   document.getElementById('reset-settings').addEventListener('click', function () { fillSettings(FC.DEFAULT_SETTINGS); });
   document.getElementById('save-settings').addEventListener('click', function () {
-    var next = {}, bad = 0;
+    var next = JSON.parse(JSON.stringify(settings)), bad = 0;  // keeps hidden settings
     settingsBox.querySelectorAll('input').forEach(function (inp) {
       var v = parseNum(inp.value);
       var invalid = !isFinite(v) || v < 0 || (inp.dataset.positive && v === 0);
@@ -751,15 +859,165 @@
     settings = FC.withDefaults(next);
     storageSet(KEYS.settings, settings);
     dialog.close ? dialog.close() : dialog.removeAttribute('open');
-    update();
+    refreshAll();
   });
+
+  // =====================================================================
+  // Main screen: container, carbs per serving, high-carb, Advanced
+  // =====================================================================
+  var SKEY = 'fuelcalc.simple.v1';
+  function defaultSimple() {
+    return {
+      container: 'bottle', bottleOz: 24, highCarb: false,
+      carbs: { bottle: 45, flask: 100, tub: 40 },
+      sodium: { bottle: null, flask: null, tub: null }  // null = automatic
+    };
+  }
+  function loadSimple() {
+    var d = defaultSimple(), saved = storageGet(SKEY, null);
+    if (!saved || typeof saved !== 'object') return d;
+    if (['bottle', 'flask', 'tub'].indexOf(saved.container) >= 0) d.container = saved.container;
+    if ([15, 21, 24].indexOf(saved.bottleOz) >= 0) d.bottleOz = saved.bottleOz;
+    if (typeof saved.highCarb === 'boolean') d.highCarb = saved.highCarb;
+    ['bottle', 'flask', 'tub'].forEach(function (k) {
+      if (saved.carbs && typeof saved.carbs[k] === 'number' && saved.carbs[k] > 0) d.carbs[k] = saved.carbs[k];
+      if (saved.sodium && typeof saved.sodium[k] === 'number' && saved.sodium[k] >= 0) d.sodium[k] = saved.sodium[k];
+    });
+    return d;
+  }
+  var simple = loadSimple();
+
+  var SFIELDS = {
+    carbs: {
+      get: function () { return simple.carbs[simple.container]; },
+      set: function (v) { simple.carbs[simple.container] = v; },
+      step: 5, min: 1, dp: 0,
+      max: function () { return simple.container === 'flask' ? settings.flaskMaxCarbs : 400; }
+    },
+    sodium: {
+      get: function () { return simple.sodium[simple.container]; },
+      set: function (v) { simple.sodium[simple.container] = v; },
+      step: 50, min: 0, dp: 0, optional: true,
+      placeholder: function () { return Math.round(simple.carbs[simple.container] * settings.sodiumMgPerCarbG) || 0; }
+    }
+  };
+  document.querySelectorAll('.field[data-sfield]').forEach(function (fieldEl) {
+    var name = fieldEl.getAttribute('data-sfield');
+    buildStepper(fieldEl, 's-' + name, SFIELDS[name], function () { updateSimple(); });
+  });
+  function fillSimpleInputs() {
+    document.querySelectorAll('.field[data-sfield]').forEach(function (fieldEl) {
+      var f = SFIELDS[fieldEl.getAttribute('data-sfield')];
+      var v = f.get();
+      if (document.activeElement !== fieldEl._input) {
+        fieldEl._input.value = v == null ? '' : fmtNum(v, val(f.dp));
+        fieldEl._input.classList.toggle('invalid', v != null && !isFinite(v));
+      }
+      if (f.placeholder) fieldEl._input.placeholder = 'auto (' + val(f.placeholder) + ')';
+    });
+  }
+  bindSeg('#s-container', function () { return simple.container; }, function (v) { simple.container = v; }, function () { updateSimple(); });
+  bindSeg('#s-size', function () { return String(simple.bottleOz); }, function (v) { simple.bottleOz = Number(v); }, function () { updateSimple(); });
+  document.getElementById('s-highcarb').addEventListener('change', function (e) { simple.highCarb = e.target.checked; updateSimple(); });
+
+  function pct(actual, target) {
+    if (!(target > 0)) return '';
+    var p = Math.round((actual / target - 1) * 100);
+    return ' (' + (p > 0 ? '+' : p < 0 ? '−' : '±') + Math.abs(p) + '%)';
+  }
+  function ratioText(r, high) {
+    return high ? '1 : ' + (1 / r).toFixed(2) : r.toFixed(2) + ' : 1';
+  }
+
+  function updateSimple() {
+    syncSegs();
+    var c = simple.container;
+    var noun = c === 'flask' ? 'flask' : c === 'tub' ? 'serving' : 'bottle';
+    show('s-size-wrap', c === 'bottle');
+    document.getElementById('s-container-hint').textContent =
+      c === 'flask' ? settings.flaskMl + ' mL HydraPak soft flask · up to ' + settings.flaskMaxCarbs + ' g carbs'
+      : c === 'tub' ? 'A tub of about ' + settings.tubTargetG + ' g dry mix, scooped one serving per bottle' : '';
+    show('s-container-hint', c !== 'bottle');
+    document.getElementById('s-carbs-unit').textContent = 'g per ' + noun;
+    document.getElementById('s-highcarb').checked = simple.highCarb;
+    document.getElementById('s-ratio-hint').textContent = simple.highCarb
+      ? 'On: 1:0.8 maltodextrin : fructose, for 75+ g/h' : 'Off: 2:1 maltodextrin : fructose';
+    var autoNa = Math.round((simple.carbs[c] || 0) * settings.sodiumMgPerCarbG);
+    document.getElementById('s-sodium-hint').textContent = 'Leave blank for ' + settings.sodiumMgPerCarbG + ' mg per g carbs (' + autoNa + ' mg).';
+    fillSimpleInputs();
+
+    var input = { carbs: simple.carbs[c], highCarb: simple.highCarb, sodiumMg: simple.sodium[c] };
+    if (input.sodiumMg != null && !isFinite(input.sodiumMg)) input.sodiumMg = NaN;
+    var r = c === 'tub' ? FC.planTub(input, settings)
+      : FC.planServing({ container: c, carbs: input.carbs, highCarb: input.highCarb, sodiumMg: input.sodiumMg, bottleOz: simple.bottleOz }, settings);
+
+    var errs = document.getElementById('s-errors');
+    errs.textContent = '';
+    storageSet(SKEY, simple);
+    if (!r.ok) {
+      r.errors.forEach(function (m) { errs.appendChild(el('div', null, m)); });
+      show('s-body', false);
+      return;
+    }
+    show('s-body', true);
+
+    var rows = document.getElementById('s-rows');
+    rows.textContent = '';
+    r.items.forEach(function (it) { rows.appendChild(row(it.name, it.text, g(it.grams))); });
+
+    var scoop = document.getElementById('s-scoop');
+    var totals = document.getElementById('s-totals');
+    var notes = document.getElementById('s-notes');
+    scoop.textContent = ''; totals.textContent = ''; notes.textContent = '';
+    function line(parent, label, text) {
+      var d = el('div');
+      if (label) d.appendChild(el('strong', null, label + ' '));
+      d.appendChild(document.createTextNode(text));
+      parent.appendChild(d);
+    }
+
+    if (c === 'tub') {
+      document.getElementById('s-title').textContent = 'Tub recipe · about ' + Math.round(r.batch.grams) + ' g';
+      line(totals, 'Makes', 'about ' + Math.round(r.batch.servings) + ' servings · ratio ' + ratioText(r.batch.ratio, simple.highCarb));
+      scoop.appendChild(el('h3', null, 'Each serving'));
+      scoop.appendChild(el('div', 'scoop', r.scoop.text + ' of mix'));
+      scoop.appendChild(el('div', 'small muted', 'about ' + g(r.scoop.grams) + ' · then add 1 Tbsp lemon/lime juice and fill the bottle with water'));
+      line(totals, 'Per serving:', Math.round(r.scoop.carbs) + ' g carbs incl. juice' + pct(r.scoop.carbs, r.target.carbs) +
+        ' · ' + mg(r.scoop.sodiumMg) + ' sodium' + pct(r.scoop.sodiumMg, r.target.sodiumMg));
+      notes.appendChild(el('div', 'note', 'Scoop size uses the mix’s estimated density, so it’s approximate. Shake the tub before scooping.'));
+    } else {
+      document.getElementById('s-title').textContent = c === 'flask' ? 'Your gel flask' : 'Your ' + simple.bottleOz + ' oz bottle';
+      rows.appendChild(row('Lemon/lime juice', r.juice.text, 'fresh'));
+      if (c === 'flask') rows.appendChild(row('Warm water', r.water.text, Math.round(r.water.ml) + ' mL'));
+      else rows.appendChild(row('Water', r.water.text, 'about ' + fmtNum(FC.mlToFlOz(r.water.ml), 1) + ' fl oz'));
+      var a = r.actual;
+      line(totals, 'Actual:', Math.round(a.carbs) + ' g carbs' + pct(a.carbs, r.target.carbs) +
+        ' · ' + mg(a.sodiumMg) + ' sodium' + pct(a.sodiumMg, r.target.sodiumMg));
+      line(totals, null, 'Ratio ' + ratioText(a.ratio, simple.highCarb) + ' · ' + a.gPer100Ml.toFixed(1) + ' g per 100 mL' +
+        (c === 'flask' ? ' · ' + Math.round(a.finalMl) + ' of 135 mL' : ''));
+      if (c === 'flask') notes.appendChild(el('div', 'note', 'Follow each squeeze with 2–3 gulps of plain water.'));
+    }
+
+    var warnings = document.getElementById('s-warnings');
+    warnings.textContent = '';
+    r.warnings.forEach(function (w) { warnings.appendChild(el('div', 'warn', '⚠️ ' + w)); });
+  }
 
   // =====================================================================
   // Start
   // =====================================================================
-  fillInputs();
-  renderRecipes();
-  update();
+  function refreshAll() {
+    updateSimple();
+    if (FEATURES.ridePlanning) update();
+  }
+  show('legacy', FEATURES.ridePlanning);
+  show('bar', FEATURES.ridePlanning);
+  document.body.classList.toggle('no-bar', !FEATURES.ridePlanning);
+  if (FEATURES.ridePlanning) {
+    fillInputs();
+    renderRecipes();
+  }
+  refreshAll();
 })();
 </script>
 </body>
